@@ -1,1 +1,1 @@
-# Hunter_Gatherer_models
+# Persistence of Infectious Diseases in Hunter Gatherers
