@@ -8,33 +8,45 @@ library(tidyverse)
 
 # Define Paramenters
 patchPopSize <-     c(500, 200, 100, 100)    # Patch size
-initial_infected <- c(  1,   0,   0,   0)     # Initial infected
-U <- length(patchPopSize)                   # Number of patches
-simName <- "SIRS metapopulation model"      # Simulation name
-tf <- 500                                   # Final time
+initial_infected <- c(  1,   0,   0,   0)    # Initial infected
+U <- length(patchPopSize)                    # Number of patches
+simName <- "SIRS metapopulation model"       # Simulation name
+tf <- 500                                    # Final time
 
 #Collect parameters
 parms <- list(
-  sigma = 1/20,                        # E to I rate
-  gamma = 0.1,                         # I to R rate
+  sigma = 1/20,                          # E to I rate
+  gamma = 0.1,                           # I to R rate
   omega = 0.005,                         # R to S rate
-  mu = 1/250,                          # Birth/death rate
+  mu = 1/250,                            # Birth/death rate per person per day
   alpha = 1/100) 
 
 #Transmission terms
 beta = 0.8
 within_pop_contact = 1
-between_pop_contact = 0.005/U #normalised by number of patches 
+between_pop_contact = 0.005/U     # normalised by number of patches 
 
+nextgen_matrix <- matrix(nrow = U, ncol = U, data = 0)
 
 for(i in 1:U){
   for(j in 1:U){
     parms[[paste0("beta_",i,i)]] = within_pop_contact*beta
+    nextgen_matrix[i,i] = within_pop_contact*beta*(1/parms$gamma)
     parms[[paste0("beta_",j,i)]] = between_pop_contact*beta
+    nextgen_matrix[j,i] = between_pop_contact*beta*(1/parms$gamma)
+    nextgen_matrix[i,j] = between_pop_contact*beta*(1/parms$gamma)
     parms[[paste0("beta_",j,j)]] = within_pop_contact*beta
+    nextgen_matrix[j,j] = within_pop_contact*beta*(1/parms$gamma)
   }
   parms[[paste0("N", i)]] = patchPopSize[i]
 }
+
+eigenvalues <- eigen(nextgen_matrix, only.values = T)
+
+R0 <- max(abs(eigenvalues$values)) 
+
+EEI <- function(R0, I)
+
 
 
 #Create the named initial state vector for the U-patch system.
