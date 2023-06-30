@@ -1,54 +1,31 @@
-#########################################
-# Demographics SIRS metapopulation model#
-#########################################
+#############################################
+# Demographics SIRS single-population model #
+#############################################
 rm(list = ls())
 
 library(GillespieSSA)
 library(tidyverse)
 
 # Define Paramenters
-patchPopSize <-     c(500, 200, 100, 100, 200, 200, 200, 200)    # Patch size
+patchPopSize <-     c(500)    # Patch size
+initial_infected <- c(  1)    # Initial infected
 U <- length(patchPopSize)                    # Number of patches
-initial_infected <-  as.vector(rmultinom(1, 1, rep(0.5, U)))   # Initial infected (initial infected patch randomly generated)
-initial_infected_patch <- which(initial_infected > 0)
 simName <- "SIRS metapopulation model"       # Simulation name
 tf <- 500                                    # Final time
 
 #Collect parameters
 parms <- list(
+  beta = 0.5,
   sigma = 1/20,                          # E to I rate
   gamma = 0.1,                           # I to R rate
   omega = 0.005,                         # R to S rate
   mu = 1/250,                            # Birth/death rate per person per day
   alpha = 1/100) 
 
-# Define transmission terms and populate next-generation matrix
-beta = 0.25
-within_pop_contact = 1
-between_pop_contact = 0.05/U     # normalised by number of patches 
 
-nextgen_matrix <- matrix(nrow = U, ncol = U, data = 0)
+# Calculate R0 and expected number of infecteds at equilibrium
+R0 <- (1/parms$gamma) * parms$beta
 
-for(i in 1:U){
-  for(j in 1:U){
-    parms[[paste0("beta_",i,i)]] = within_pop_contact*beta
-    nextgen_matrix[i,i] = within_pop_contact*beta*(1/parms$gamma)
-    parms[[paste0("beta_",j,i)]] = between_pop_contact*beta
-    nextgen_matrix[j,i] = between_pop_contact*beta*(1/parms$gamma)
-    nextgen_matrix[i,j] = between_pop_contact*beta*(1/parms$gamma)
-    parms[[paste0("beta_",j,j)]] = within_pop_contact*beta
-    nextgen_matrix[j,j] = within_pop_contact*beta*(1/parms$gamma)
-  }
-  parms[[paste0("N", i)]] = patchPopSize[i]
-}
-
-# Calculate R0 from NGM
-eigenvalues <- eigen(nextgen_matrix, only.values = T)
-
-R0 <- max(abs(eigenvalues$values)) 
-
-
-# Calculate expected infecteds at equilibrium (function only applies to single population system but should investigate for meta)
 EEI <- function(R0, Infectiousness_recip, Immunity_recip) {
   y = ((R0 - 1) * Immunity_recip) / (Infectiousness_recip * R0)
   return(y)
@@ -72,9 +49,9 @@ names(x0) <- unlist(lapply(seq_len(U), function(i) paste0(c("S","E","I", "R", "N
 # Define the state change matrix for a single patch
 nu <- matrix(c( -1,  0,  0, +1, +1, -1,  0,  0,  0,  0, # S
                 +1, -1,  0,  0,  0,  0, -1,  0,  0,  0, # E
-                 0, +1, -1,  0,  0,  0,  0, -1,  0, -1, # I
-                 0,  0, +1, -1,  0,  0,  0,  0, -1,  0, # R 
-                 0,  0,  0,  0, +1, -1 ,-1, -1, -1, -1), # N
+                0, +1, -1,  0,  0,  0,  0, -1,  0, -1, # I
+                0,  0, +1, -1,  0,  0,  0,  0, -1,  0, # R 
+                0,  0,  0,  0, +1, -1 ,-1, -1, -1, -1), # N
              nrow=5,byrow=TRUE)
 
 # Define propensity functions
@@ -85,14 +62,9 @@ a <-
     function(patch) {
       i <- patch
       patches <- 1:U
-      #j <- if (patch == 1) U else patch - 1
-      other_patches <- patches[-i]
-      patch_beta <- c()
-      for(k in (1:(U-1))){
-        patch_beta[k] = paste0("+(beta_", other_patches[k],i, "*I", other_patches[k], "/N", other_patches[k], ")*S", i)
-      }
+      j <- if (patch == 1) U else patch - 1
       c(
-        paste0("(beta_", i, i, "*I", i,"/N", i, ")*S",i, paste0(patch_beta, collapse="")), # Infection
+        paste0("(beta*I", i,"/N", i, ")*S",i), # Infection
         paste0("sigma*E", i),                                       # Becomes infecious
         paste0("gamma*I", i),                                       # Recovery from infection
         paste0("omega*R", i),       # Loss of immunity
@@ -108,7 +80,7 @@ a <-
   ))
 
 # Run simulations with the Direct method
-
+set.seed(2)
 out <- ssa(
   x0 = x0,
   a = a,
@@ -137,9 +109,9 @@ plot_data <- out$data %>%
 
 ggplot(data = plot_data, aes(x=t, y=count, colour=state))+
   geom_line()+
-  facet_wrap(~factor(patch, levels = unique(patch)) ,ncol = 1, scales = "free_y")+
   labs(x="Time",
        y="Frequency")+
+  geom_hline(yintercept = expected_infected, linetype = 'dashed') +
   theme_bw()
 
 ## Table showing extinction/transmission info for each patch
@@ -158,7 +130,6 @@ extinct_data <- out$data %>%
   drop_na() %>%
   select(patch, count, persist)
 
-## How does actual number of infecteds at end of sim compare with 
 sum(extinct_data$count) # Total number of infecteds at the end of sim across all patches
 expected_infected
 
