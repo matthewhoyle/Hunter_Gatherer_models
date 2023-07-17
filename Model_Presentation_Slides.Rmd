@@ -1,0 +1,74 @@
+---
+title: "UCL Presentation"
+author: "Matthew Hoyle"
+date: "2023-07-03"
+output:
+  slidy_presentation: default
+  #beamer_presentation: default
+#output: powerpoint_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+source("GSSA_Demo_Metapop_Flex_Patch_Size.R")
+```
+
+## Single Poulation SEIRS Compartment Model
+
+$$\frac{{{\mathrm{d}}E}}{{{\mathrm{d}}t}} = \underbrace {\beta IS/N}_{{\mathrm{infection}}} - \underbrace {\sigma E}_{{\mathrm{latency}}} - \underbrace {\mu E}_{{\mathrm{death}}}$$
+$$\frac{{{\mathrm{d}}I}}{{{\mathrm{d}}t}} = \underbrace {\sigma E}_{{\mathrm{latency}}} - \underbrace {\gamma I}_{{\mathrm{recovery}}} - \underbrace {\left( {\mu + \alpha } \right)I}_{{\mathrm{death}}}$$
+$$\frac{{{\mathrm{d}}I}}{{{\mathrm{d}}t}} = \underbrace {\sigma E}_{{\mathrm{latency}}} - \underbrace {\gamma I}_{{\mathrm{recovery}}} - \underbrace {\left( {\mu + \alpha } \right)I}_{{\mathrm{death}}}$$
+$$\frac{{{\mathrm{d}}R}}{{{\mathrm{d}}t}} = \underbrace {\gamma I}_{{\mathrm{recovery}}} - \underbrace {\omega R}_{{\mathrm{lost}}\ {\mathrm{immunity}}} - \underbrace {\mu R}_{{\mathrm{death}}}$$ 
+
+
+## Stochastic Metapopulation model
+
+
+
+## Contact Matrix
+$$
+\beta = C * b
+$$
+
+$$
+\begin{bmatrix}
+b_{ii} & b_{ij} & ...\\
+b_{ji} & b_{jj} & ...\\
+... & ... &...
+\end{bmatrix} 
+*
+b
+=
+\begin{bmatrix}
+\beta_{ii} & \beta_{ij} & ...\\
+\beta_{jj} & \beta_{jj} & ...\\
+... & ... &...
+\end{bmatrix} 
+$$
+
+$$ 
+C
+=
+\begin{bmatrix}
+1 & \frac{1}{2} & \frac{1}{2}\\
+\frac{1}{2} & 1 & \frac{1}{2}\\
+\frac{1}{2} & \frac{1}{2} & 1
+\end{bmatrix}
+$$
+
+- Bullet 1
+- Bullet 2
+- Bullet 3
+
+## Slide with R Output
+
+```{r cars, echo = TRUE}
+head(out$data)
+```
+
+## Slide with Plot
+
+```{r pressure}
+extra_plot
+```
+
