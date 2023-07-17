@@ -42,11 +42,12 @@ for(i in 1:U){
   parms[[paste0("N", i)]] = patchPopSize[i]
 }
 
+
 # Calculate R0 from NGM
+
 eigenvalues <- eigen(nextgen_matrix, only.values = T)
 
 R0 <- max(abs(eigenvalues$values)) 
-
 
 # Calculate expected infecteds at equilibrium (function only applies to single population system but should investigate for meta)
 EEI <- function(R0, Infectiousness_recip, Immunity_recip) {
@@ -55,6 +56,7 @@ EEI <- function(R0, Infectiousness_recip, Immunity_recip) {
 }
 
 expected_infected = EEI(R0 = R0, Infectiousness_recip = parms$gamma, Immunity_recip = parms$omega) * sum(patchPopSize)
+
 
 
 #Create the named initial state vector for the U-patch system.
