@@ -7,21 +7,13 @@ library(GillespieSSA)
 library(tidyverse)
 
 # Define Paramenters
-<<<<<<< Updated upstream
 patchPopSize <-     c(500, 200, 100, 100, 200, 200, 200, 200)    # Patch size
 U <- length(patchPopSize)                    # Number of patches
 initial_infected <-  as.vector(rmultinom(1, 1, rep(0.5, U)))   # Initial infected (initial infected patch randomly generated)
 initial_infected_patch <- which(initial_infected > 0)
 simName <- "SIRS metapopulation model"       # Simulation name
 tf <- 500                                    # Final time
-=======
-patchPopSize <-     c(500, 200, 100)    # Patch size
-U <- length(patchPopSize)                   # Number of patches
-initial_infected <- as.vector(rmultinom(1, 1, rep(0.5, U)))   #single infection in randomly assigned patch
 
-simName <- "SIRS metapopulation model"      # Simulation name
-tf <- 500                                   # Final time
->>>>>>> Stashed changes
 
 #Collect parameters
 parms <- list(
@@ -31,13 +23,9 @@ parms <- list(
   mu = 1/250,                            # Birth/death rate per person per day
   alpha = 1/100) 
 
-<<<<<<< Updated upstream
 # Define transmission terms and populate next-generation matrix
 beta = 0.25
-=======
-#Transmission terms
-beta = 0.5
->>>>>>> Stashed changes
+
 within_pop_contact = 1
 between_pop_contact = 0.05/U     # normalised by number of patches 
 
@@ -63,7 +51,7 @@ eigenvalues <- eigen(nextgen_matrix, only.values = T)
 
 R0 <- max(abs(eigenvalues$values)) 
 
-<<<<<<< Updated upstream
+
 # Calculate expected infecteds at equilibrium (function only applies to single population system but should investigate for meta)
 EEI <- function(R0, Infectiousness_recip, Immunity_recip) {
   y = ((R0 - 1) * Immunity_recip) / (Infectiousness_recip * R0)
@@ -72,9 +60,6 @@ EEI <- function(R0, Infectiousness_recip, Immunity_recip) {
 
 expected_infected = EEI(R0 = R0, Infectiousness_recip = parms$gamma, Immunity_recip = parms$omega) * sum(patchPopSize)
 
-
-=======
->>>>>>> Stashed changes
 
 #Create the named initial state vector for the U-patch system.
 
