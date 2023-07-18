@@ -16,8 +16,9 @@ library(tidyverse)
 # Define Paramenters
 ```{r}
 patchPopSize <-     c(500, 200, 100, 100)    # Patch size
-initial_infected <- c(  1,   0,   0,   0)     # Initial infected
-U <- length(patchPopSize)                   # Number of patches
+U <- length(patchPopSize)                    # Number of patches
+initial_infected <-  as.vector(rmultinom(1, 1, rep(0.5, U)))   # Initial infected (initial infected patch randomly generated)
+initial_infected_patch <- which(initial_infected > 0)                 # Number of patches
 simName <- "SIRS metapopulation model"      # Simulation name
 tf <- 500                                   # Final time
 
