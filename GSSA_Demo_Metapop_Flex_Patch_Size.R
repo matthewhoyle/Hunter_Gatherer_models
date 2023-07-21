@@ -27,7 +27,7 @@ parms <- list(
 beta = 0.25
 
 within_pop_contact = 1
-between_pop_contact = 0.05/U     # normalised by number of patches 
+between_pop_contact = 0.5/U     # normalised by number of patches 
 
 nextgen_matrix <- matrix(nrow = U, ncol = U, data = 0)
 
@@ -53,12 +53,12 @@ R0 <- max(abs(eigenvalues$values))
 
 
 # Calculate expected infecteds at equilibrium (function only applies to single population system but should investigate for meta)
-EEI <- function(R0, Infectiousness_recip, Immunity_recip) {
+EIE <- function(R0, Infectiousness_recip, Immunity_recip) {
   y = ((R0 - 1) * Immunity_recip) / (Infectiousness_recip * R0)
   return(y)
 }
 
-expected_infected = EEI(R0 = R0, Infectiousness_recip = parms$gamma, Immunity_recip = parms$omega) * sum(patchPopSize)
+expected_infected = EIE(R0 = R0, Infectiousness_recip = parms$gamma, Immunity_recip = parms$omega) * sum(patchPopSize)
 
 
 #Create the named initial state vector for the U-patch system.
@@ -166,4 +166,15 @@ extinct_data <- out$data %>%
 ## How does actual number of infecteds at end of sim compare with 
 sum(extinct_data$count) # Total number of infecteds at the end of sim across all patches
 expected_infected
+
+sim_endpoint <- as.tibble(out$data) %>%
+  slice_max(t) %>%
+  distinct()
+
+
+print("Did simulation run reach final endpoint?")
+if (sim_endpoint$t >= tf) {
+  print("Yes")
+} else {
+  print("No")}
 
