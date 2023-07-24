@@ -20,7 +20,7 @@ parms <- list(
   sigma = 1/20,                          # E to I rate
   gamma = 0.1,                           # I to R rate
   omega = 0.005,                         # R to S rate
-  mu = 1/250,                            # Birth/death rate per person per day
+  mu = 0.0045,                            # Birth/death rate per person per day
   alpha = 1/100) 
 
 # Define transmission terms and populate next-generation matrix

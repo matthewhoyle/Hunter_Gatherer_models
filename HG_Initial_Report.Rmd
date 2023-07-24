@@ -12,7 +12,9 @@ library(wesanderson)
 
 ## Model Parameter estimation
 
-### Agta Hunter-Gatherer Birth/death rate
+### Agta Hunter-Gatherer Demography
+
+Information regarding births, deaths and population size were obtain from a study conducted by Headland et al., (2011). Authors conducted a census-like survey of the 
 ```{r}
 agta_demo <- read.csv("AgtaPopDynamics_Headland2007.csv")
 
@@ -21,13 +23,54 @@ ggplot(agta_demo, aes(x=Year)) +
   geom_line(aes(y=Births), colour = wes_palettes$Darjeeling1[2]) +
   geom_line(aes(y=Deaths), colour = wes_palettes$Darjeeling1[3]) +
   theme_bw()
+```
 
+#### Population Size
+```{r}
+hist(agta_demo$PopSize)
+summary(agta_demo$PopSize)
+```
+
+#### Births
+```{r}
 hist(agta_demo$Births)
 summary(agta_demo$Births)
+```
 
+#### Deaths
+```{r}
 hist(agta_demo$Deaths)
+summary(agta_demo$Deaths)
+```
+
+#### Birth/Death rate per 1,000
+```{r warning=FALSE}
+agta_demo <- agta_demo %>%
+  mutate(Birth_rate = Births/PopSize,
+         Death_rate = Deaths/PopSize,
+         BD_rate = (Births - Deaths)/PopSize,
+         PopChange = (diff = PopSize - lag(PopSize, default = first(PopSize))),
+         PopChange_rate = abs(PopChange)/PopSize)
 
 
+hist(agta_demo$Birth_rate)
+hist(agta_demo$Death_rate)
+
+ggplot(agta_demo, aes(x=Year)) +
+  geom_line(aes(y=Birth_rate), colour = wes_palettes$Darjeeling1[2]) +
+  geom_line(aes(y=Death_rate), colour = wes_palettes$Darjeeling1[3]) +
+  theme_bw()
+
+sum_table <- agta_demo %>%
+  select(PopSize, Birth_rate, Death_rate, BD_rate, PopChange_rate) %>%
+    summarise(across(
+    .cols = is.numeric, 
+    .fns = list(Mean = mean, SD = sd), na.rm = TRUE, 
+    .names = "{col}_{fn}"
+    ))
+sum_table
+
+sum_list <- as.list(sum_table)
 ```
 
 ## Single Population Model
@@ -42,7 +85,7 @@ library(GillespieSSA)
 library(tidyverse)
 
 # Define Paramenters
-patchPopSize <-     53    # Patch size
+patchPopSize <-     500000 #53    # Patch size
 initial_infected <-  1    # Initial infected
 U <- length(patchPopSize)                    # Number of patches
 simName <- "SIRS metapopulation model"       # Simulation name
@@ -54,7 +97,8 @@ parms <- list(
   sigma = 0.000249,                          # E to I rate
   gamma = 0.0188,                           # I to R rate
   omega = 0.00,                         # R to S rate
-  mu = 0,                            # Birth/death rate per person per day
+  mu =  0.002,       # Birth rate per person per day (Ask tom is this should be taken from distribution or just use mean)
+  phi = sum_list$Death_rate_Mean,      # Death rate
   alpha = 0) 
 
 
@@ -115,7 +159,7 @@ a <-
   ))
 
 # Run simulations with the Direct method
-set.seed(2)
+#set.seed(2)
 out <- ssa(
   x0 = x0,
   a = a,
@@ -212,7 +256,7 @@ parms <- list(
 beta = 0.0017
 
 within_pop_contact = 0.27
-between_pop_contact = 0.1     # normalised by number of patches 
+between_pop_contact = hist(rgamma(100, 0.1, 0.1))     # normalised by number of patches 
 
 nextgen_matrix <- matrix(nrow = U, ncol = U, data = 0)
 
@@ -363,4 +407,6 @@ if (sim_endpoint$t >= tf) {
   print("No")}
 
 ```
+
+
 
