@@ -7,7 +7,7 @@ library(GillespieSSA)
 library(tidyverse)
 
 # Define Paramenters
-patchPopSize <-     c(500)    # Patch size
+patchPopSize <-     c(53)    # Patch size
 initial_infected <- c(  1)    # Initial infected
 U <- length(patchPopSize)                    # Number of patches
 simName <- "SIRS metapopulation model"       # Simulation name
@@ -15,12 +15,12 @@ tf <- 500                                    # Final time
 
 #Collect parameters
 parms <- list(
-  beta = 0.5,
-  sigma = 1/20,                          # E to I rate
-  gamma = 0.1,                           # I to R rate
-  omega = 0.005,                         # R to S rate
-  mu = 1/250,                            # Birth/death rate per person per day
-  alpha = 1/100) 
+  beta = 0.696,
+  sigma = 0.0685,                          # E to I rate
+  gamma = 0.116,                           # I to R rate
+  omega = 0,                         # R to S rate
+  mu = 3.484228e-05,                            # Birth/death rate per person per day
+  alpha = 0.15) 
 
 
 # Calculate R0 and expected number of infecteds at equilibrium
@@ -93,9 +93,6 @@ out <- ssa(
   consoleInterval = 1
 ) 
 
-
-# Built-in plotting function
-# ssa.plot(out, by = 2, show.title = TRUE, show.legend = T) #all states
 
 ## Extra Plots
 plot_data <- out$data %>%

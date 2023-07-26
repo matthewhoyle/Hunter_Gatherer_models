@@ -7,7 +7,7 @@ library(GillespieSSA)
 library(tidyverse)
 
 # Define Paramenters
-patchPopSize <-     c(500, 200, 100, 100, 200, 200, 200, 200)    # Patch size
+patchPopSize <-     c(500, 200, 100, 100)    # Patch size
 U <- length(patchPopSize)                    # Number of patches
 initial_infected <-  as.vector(rmultinom(1, 1, rep(0.5, U)))   # Initial infected (initial infected patch randomly generated)
 initial_infected_patch <- which(initial_infected > 0)
@@ -17,14 +17,14 @@ tf <- 500                                    # Final time
 
 #Collect parameters
 parms <- list(
-  sigma = 1/20,                          # E to I rate
-  gamma = 0.1,                           # I to R rate
-  omega = 0.005,                         # R to S rate
+  sigma = 0.0095,                          # E to I rate
+  gamma = 0.0085,                           # I to R rate
+  omega = 0.00012,                         # R to S rate
   mu = 0.0045,                            # Birth/death rate per person per day
   alpha = 1/100) 
 
 # Define transmission terms and populate next-generation matrix
-beta = 0.25
+beta = 0.105
 
 within_pop_contact = 1
 between_pop_contact = 0.5/U     # normalised by number of patches 
@@ -50,15 +50,6 @@ for(i in 1:U){
 eigenvalues <- eigen(nextgen_matrix, only.values = T)
 
 R0 <- max(abs(eigenvalues$values)) 
-
-
-# Calculate expected infecteds at equilibrium (function only applies to single population system but should investigate for meta)
-EIE <- function(R0, Infectiousness_recip, Immunity_recip) {
-  y = ((R0 - 1) * Immunity_recip) / (Infectiousness_recip * R0)
-  return(y)
-}
-
-expected_infected = EIE(R0 = R0, Infectiousness_recip = parms$gamma, Immunity_recip = parms$omega) * sum(patchPopSize)
 
 
 #Create the named initial state vector for the U-patch system.
@@ -126,9 +117,6 @@ out <- ssa(
 ) 
 
 
-# Built-in plotting function
-# ssa.plot(out, by = 2, show.title = TRUE, show.legend = T) #all states
-
 ## Extra Plots
 plot_data <- out$data %>%
   as_tibble() %>%
@@ -163,9 +151,7 @@ extinct_data <- out$data %>%
   drop_na() %>%
   select(patch, count, persist)
 
-## How does actual number of infecteds at end of sim compare with 
-sum(extinct_data$count) # Total number of infecteds at the end of sim across all patches
-expected_infected
+
 
 sim_endpoint <- as.tibble(out$data) %>%
   slice_max(t) %>%
