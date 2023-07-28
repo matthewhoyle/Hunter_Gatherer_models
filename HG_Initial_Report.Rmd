@@ -103,7 +103,7 @@ parms <- list(
   sigma = 0.000249,                          # E to I rate
   gamma = 0.0188,                           # I to R rate
   omega = 0.00,                         # R to S rate
-  mu =  0.002,       # Birth rate per person per day (Ask tom is this should be taken from distribution or just use mean)
+  mu =  3.41e-05,       # Birth rate per person per day (Ask tom is this should be taken from distribution or just use mean)
   phi = sum_list$Death_rate_Mean,      # Death rate
   alpha = 0) 
 
@@ -255,7 +255,7 @@ parms <- list(
   sigma = 0.0024,                          # E to I rate
   gamma = 0.0018,                           # I to R rate
   omega = 0.00,                         # R to S rate
-  mu = 0,                            # Birth/death rate per person per day
+  mu = 3.41e-05,                            # Birth/death rate per person per day
   alpha = 0) 
 
 # Define transmission terms and populate next-generation matrix
@@ -440,7 +440,7 @@ parms <- list(
   sigma = 0.175,                          # E to I rate
   gamma = 0.2,                           # I to R rate
   omega = 1/90,                         # R to S rate
-  mu = 3.484228e-05,                            # Birth/death rate per person per day
+  mu = 3.41e-05,                            # Birth/death rate per person per day
   alpha = 0.0097) 
 
 
@@ -576,7 +576,7 @@ parms <- list(
   sigma = 0.175,                          # E to I rate
   gamma = 0.2,                           # I to R rate
   omega = 1/90,                         # R to S rate
-  mu = 3.484228e-05,                            # Birth/death rate per person per day
+  mu = 3.41e-05,                            # Birth/death rate per person per day
   alpha = 0.0097) 
 
 # Define transmission terms and populate next-generation matrix
@@ -757,7 +757,7 @@ parms <- list(
   sigma = 1/6,                          # E to I rate
   gamma = 1/6,                           # I to R rate
   omega = 0,                         # R to S rate
-  mu = 3.484228e-05,                            # Birth/death rate per person per day
+  mu = 3.41e-05,                            # Birth/death rate per person per day
   alpha = 0.00) 
 
 
@@ -895,7 +895,7 @@ parms <- list(
   sigma = 1/6,                          # E to I rate
   gamma = 1/6,                           # I to R rate
   omega = 0,                         # R to S rate
-  mu = 3.484228e-05,                            # Birth/death rate per person per day
+  mu = 3.41e-05,                            # Birth/death rate per person per day
   alpha = 0.00)
 
 # Define transmission terms and populate next-generation matrix
@@ -1078,7 +1078,7 @@ parms <- list(
   sigma = 1/0.0164,                          # E to I rate
   gamma = 0,                           # I to R rate
   omega = 0,                         # R to S rate
-  mu = 3.484228e-05,                            # Birth/death rate per person per day
+  mu = 3.41e-05,                            # Birth/death rate per person per day
   alpha = 0) 
 
 
@@ -1217,7 +1217,7 @@ parms <- list(
   sigma = 1/0.0164,                          # E to I rate
   gamma = 0,                           # I to R rate
   omega = 0,                         # R to S rate
-  mu = 3.484228e-05,                            # Birth/death rate per person per day
+  mu = 3.41e-05,                            # Birth/death rate per person per day
   alpha = 0) 
 
 # Define transmission terms and populate next-generation matrix
@@ -1398,7 +1398,7 @@ parms <- list(
   sigma = 1/5.3,                          # E to I rate
   gamma = 1/5.6,                           # I to R rate
   omega = 0,                         # R to S rate
-  mu = 3.484228e-05,                            # Birth/death rate per person per day
+  mu = 3.41e-05,                            # Birth/death rate per person per day
   alpha = 0.5) 
 
 
@@ -1534,7 +1534,7 @@ parms <- list(
   sigma = 1/5.3,                          # E to I rate
   gamma = 1/5.6,                           # I to R rate
   omega = 0,                         # R to S rate
-  mu = 3.484228e-05,                            # Birth/death rate per person per day
+  mu = 3.41e-05,                            # Birth/death rate per person per day
   alpha = 0.5) 
 
 # Define transmission terms and populate next-generation matrix
@@ -1702,7 +1702,7 @@ parms <- list(
   sigma = 0.0685,                          # E to I rate
   gamma = 0.116,                           # I to R rate
   omega = 0,                         # R to S rate
-  mu = 3.484228e-05,                            # Birth/death rate per person per day
+  mu = 3.41e-05,                            # Birth/death rate per person per day
   alpha = 0.15) 
 
 
@@ -1839,7 +1839,7 @@ parms <- list(
   sigma = 0.0685,                          # E to I rate
   gamma = 0.116,                           # I to R rate
   omega = 0,                         # R to S rate
-  mu = 3.484228e-05,                            # Birth/death rate per person per day
+  mu = 3.41e-05,                            # Birth/death rate per person per day
   alpha = 0.15) 
 
 # Define transmission terms and populate next-generation matrix
