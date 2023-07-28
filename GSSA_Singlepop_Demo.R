@@ -7,20 +7,20 @@ library(GillespieSSA)
 library(tidyverse)
 
 # Define Paramenters
-patchPopSize <-     c(53)    # Patch size
-initial_infected <- c(  1)    # Initial infected
+patchPopSize <-     53    # Patch size
+initial_infected <- 1    # Initial infected
 U <- length(patchPopSize)                    # Number of patches
 simName <- "SIRS metapopulation model"       # Simulation name
-tf <- 500                                    # Final time
+tf <- 500                                   # Final time
 
 #Collect parameters
 parms <- list(
-  beta = 0.696,
-  sigma = 0.0685,                          # E to I rate
-  gamma = 0.116,                           # I to R rate
-  omega = 0,                         # R to S rate
-  mu = 3.484228e-05,                            # Birth/death rate per person per day
-  alpha = 0.15) 
+  beta = 0.9,
+  sigma = 0.67,                          # E to I rate
+  gamma = 0.33,                           # I to R rate
+  omega = 1/365,                         # R to S rate
+  mu = 3.41e-05,                            # Birth/death rate per person per day
+  alpha = 0) 
 
 
 # Calculate R0 and expected number of infecteds at equilibrium
@@ -80,7 +80,7 @@ a <-
   ))
 
 # Run simulations with the Direct method
-set.seed(2)
+set.seed(1)
 out <- ssa(
   x0 = x0,
   a = a,
