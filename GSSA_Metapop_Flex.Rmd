@@ -154,9 +154,10 @@ extinct_data
 
 ```{r}
 ## Run multiple simulations and saving output
-num_sims <- 10
+num_sims <- 100
 sim_list <- list()
 sim_list <- vector("list", length = num_sims)
+sim_plot_list <- vector("list", length = num_sims)
 
 
 for (i in 1:num_sims){
@@ -173,6 +174,21 @@ for (i in 1:num_sims){
     consoleInterval = 1
   )
   
+  
+# Extract output data for plotting
+  sim_plot <- out_2$data %>%
+      as_tibble() %>%
+      pivot_longer(!t, names_to = "ID", values_to = "count") %>%
+      separate(ID, 
+           into = c("state", "patch"), 
+           sep = "(?<=[A-Za-z])(?=[0-9])") %>%
+      mutate(state = factor(state, levels = c("S", "E", "I", "N")),
+             sim = i) %>%
+      filter(state != "N")
+  
+  sim_plot_list[[i]] <- sim_plot
+  
+# Extract Final time point from output data
   sim_data <- out_2$data %>%
     as_tibble() %>%
     slice_max(t) %>%
@@ -190,14 +206,40 @@ for (i in 1:num_sims){
   
   sim_list[[i]] <- sim_data
 }
+sim_plot_output <- bind_rows(sim_plot_list)
 
 sim_output <- bind_rows(sim_list)
-sim_output
+```
 
-sim_output %>%
-  group_by(patch) %>%
-  summarise(total_persist = sum(persist, na.rm = T)) %>%
-  mutate(percent_persist = total_persist/(U+num_sims))
+
+```{r}
+# Summary table of endpoint data
+sim_summary <- sim_output %>%
+  group_by(sim) %>%
+  summarise(total_p_persist = sum(persist, na.rm = T), 
+            total_infecteds = sum(count)) %>%
+  mutate(percent_P_persist = total_p_persist/(U)*100, 
+         persist = case_when(total_infecteds > 0 ~ T, 
+                               total_infecteds == 0 ~ F))
+sim_summary
+```
+
+```{r}
+# In how many simulations did the pathogen persist to simulation end point?
+sum(sim_summary$persist)
+```
+
+## Plot multiple sims
+```{r}
+sim_plot_output <- sim_plot_output %>%
+  filter(state=="I")
+
+ggplot(data = sim_plot_output, aes(x=t, y=count, colour=as.factor(sim)))+
+  geom_line(alpha = 0.5)+
+  facet_wrap(~factor(patch, levels = unique(patch)) ,ncol = 1, scales = "free_y")+
+  labs(x="Time",
+       y="Frequency")+
+  theme_bw()
 ```
 
 

@@ -153,7 +153,7 @@ extinct_data <- out$data %>%
 
 
 
-sim_endpoint <- as.tibble(out$data) %>%
+sim_endpoint <- as_tibble(out$data) %>%
   slice_max(t) %>%
   distinct()
 

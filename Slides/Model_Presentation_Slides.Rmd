@@ -15,8 +15,10 @@ source("GSSA_Demo_Metapop_Flex_Patch_Size.R")
 
 ## Single Poulation SEIRS Compartment Model
 
-$$\frac{{{\mathrm{d}}E}}{{{\mathrm{d}}t}} = \underbrace {\beta IS/N}_{{\mathrm{infection}}} - \underbrace {\sigma E}_{{\mathrm{latency}}} - \underbrace {\mu E}_{{\mathrm{death}}}$$
-$$\frac{{{\mathrm{d}}I}}{{{\mathrm{d}}t}} = \underbrace {\sigma E}_{{\mathrm{latency}}} - \underbrace {\gamma I}_{{\mathrm{recovery}}} - \underbrace {\left( {\mu + \alpha } \right)I}_{{\mathrm{death}}}$$
+$$\frac{{{\mathrm{d}}S}}{{{\mathrm{d}}t}} = \underbrace {\mu N}_{{\mathrm{birth}}} - \underbrace {\beta IS/N}_{{\mathrm{infection}}} + \underbrace {\omega R}_{{\mathrm{lost}}\,{\mathrm{immunity}}} - \underbrace {\mu S}_{{\mathrm{death}}}
+$$
+$$\frac{{{\mathrm{d}}E}}{{{\mathrm{d}}t}} = \underbrace {\beta IS/N}_{{\mathrm{infection}}} - \underbrace {\sigma E}_{{\mathrm{latency}}} - \underbrace {\mu E}_{{\mathrm{death}}}
+$$
 $$\frac{{{\mathrm{d}}I}}{{{\mathrm{d}}t}} = \underbrace {\sigma E}_{{\mathrm{latency}}} - \underbrace {\gamma I}_{{\mathrm{recovery}}} - \underbrace {\left( {\mu + \alpha } \right)I}_{{\mathrm{death}}}$$
 $$\frac{{{\mathrm{d}}R}}{{{\mathrm{d}}t}} = \underbrace {\gamma I}_{{\mathrm{recovery}}} - \underbrace {\omega R}_{{\mathrm{lost}}\ {\mathrm{immunity}}} - \underbrace {\mu R}_{{\mathrm{death}}}$$ 
 

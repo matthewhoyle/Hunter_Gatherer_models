@@ -79,6 +79,7 @@ sum_table
 sum_list <- as.list(sum_table)
 ```
 
+
 ## *Mycobacterium Tuberculosis*
 
 To first observe the dynamics 
@@ -439,7 +440,7 @@ parms <- list(
   beta = 0.6,
   sigma = 0.175,                          # E to I rate
   gamma = 0.2,                           # I to R rate
-  omega = 1/90,                         # R to S rate
+  omega = 1/180,                         # R to S rate
   mu = 3.41e-05,                            # Birth/death rate per person per day
   alpha = 0.0097) 
 
@@ -575,7 +576,7 @@ tf <- 500                                   # Final time
 parms <- list(
   sigma = 0.175,                          # E to I rate
   gamma = 0.2,                           # I to R rate
-  omega = 1/90,                         # R to S rate
+  omega = 1/180,                         # R to S rate
   mu = 3.41e-05,                            # Birth/death rate per person per day
   alpha = 0.0097) 
 
@@ -694,7 +695,6 @@ extra_plot <- ggplot(data = plot_data, aes(x=t, y=count, colour=state))+
 extra_plot
 ```
 
-
 ```{r}
 ## Table showing extinction/transmission info for each patch
 
@@ -734,7 +734,65 @@ if (sim_endpoint$t >= tf) {
   print("No")}
 
 ```
+```{r}
+## Run multiple simulations and saving output
+num_sims <- 100
+sim_list <- list()
+sim_list <- vector("list", length = num_sims)
 
+for (i in 1:num_sims){
+  #set.seed(i)
+  out_100_sim <- ssa(
+    x0 = x0,
+    a = a,
+    nu = nu,
+    parms = parms,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data <- out_100_sim$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "ID", values_to = "count") %>%
+    separate(ID, 
+             into = c("state", "patch"), 
+             sep = "(?<=[A-Za-z])(?=[0-9])") %>%
+    mutate(state = factor(state, levels = c("S", "E", "I", "N")),
+           persist = case_when(state=="I" & count > 0 ~ T, 
+                               state=="I" & count == 0 ~ F),
+           sim = i) %>%
+    drop_na() %>%
+    select(sim, patch, count, persist)
+  
+  sim_list[[i]] <- sim_data
+}
+
+sim_output <- bind_rows(sim_list)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_summary <- sim_output %>%
+  group_by(sim) %>%
+  summarise(total_p_persist = sum(persist, na.rm = T), 
+            total_infecteds = sum(count)) %>%
+  mutate(percent_P_persist = total_p_persist/(U)*100, 
+         persist = case_when(total_infecteds > 0 ~ T, 
+                               total_infecteds == 0 ~ F))
+sim_summary
+```
+
+```{r}
+# In how many simulations did the pathogen persist to simulation end point?
+sum(sim_summary$persist)
+```
 ## Measles 
 ###Single-Population Model
 ```{r}
