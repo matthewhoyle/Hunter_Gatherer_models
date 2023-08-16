@@ -10,7 +10,7 @@ output:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
-source("GSSA_Demo_Metapop_Flex_Patch_Size.R")
+source("/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models/GSSA_Demo_Metapop_Flex_Patch_Size.R")
 ```
 
 ## Single Poulation SEIRS Compartment Model
