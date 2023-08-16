@@ -21,7 +21,7 @@ library(tidyverse)
 
 ## Background
 
- The traditionally held belief that most modern infectious diseases emerged when humans began living in larger agricultural settlements has been challenged by studies of modern hunter-gatherers. This study will investigate which emerging pathogens may persist in hunter-gatherer groups by constructing a compartment model of infectious disease transmission that accounts for demography and multi-band structure. This study will look to understand how the critical community size required to sustain an outbreak is affected by host population dynamics. We show that metapopulation structure increases the probability of a respiratory pathogen with waning immunity persisting after 3 years. The probability of persistence increases with the number of sub-populations but is largely determined by the duration of immunity. Understanding the origins of infectious diseases is an important area of research that will lead to improved strategies for reducing their global burden.
+The traditionally held belief that most modern infectious diseases emerged when humans began living in larger agricultural settlements has been challenged by studies of modern hunter-gatherers. This study will investigate which emerging pathogens may persist in hunter-gatherer groups by constructing a compartment model of infectious disease transmission that accounts for demography and multi-band structure. This study will look to understand how the critical community size required to sustain an outbreak is affected by host population dynamics. We show that metapopulation structure increases the probability of a respiratory pathogen with waning immunity persisting after 3 years. The probability of persistence increases with the number of sub-populations but is largely determined by the duration of immunity. Understanding the origins of infectious diseases is an important area of research that will lead to improved strategies for reducing their global burden.
 
 This report will cover the full analysis undertaken to generate the results used in my MSc project. A full description of the research project aims and methods can be found in the final paper in the [`Hunter_Gatherer_models`](https://github.com/matthewhoyle/Hunter_Gatherer_models) GitHub repository.  Some code used in this project was adapted from the tutorials attached to the `GillespieSSA` package. 
 
@@ -126,12 +126,12 @@ camp.size
 For the purpose of this investigation we formulated a hypothetical respiratory pathogen, referred to as pathogen X. Taking into account the biological trade-offs between high transmissibility and high pathogenicity, pathogen X was decided to be highly infectious with a relatively low case fatality rate of 0.005. Transmission occurred via close contact with an infected individual. Infection was characterised by a latent period of 5.7 days followed by an infectious period of 5 days. Individuals who recovered from infection were immune for 100 days, after which immunity waned and individuals became susceptible to re-infection. Based on these characteristics, the parameters in table 1 were assumed and input into the final models.
 
 **Parameter** | **Rate** | **Value**
- --- | --- | ---  
-$\beta$  |  Transmission | 0.6 
-$\sigma$ |  Infectious   | 0.175 
-$\gamma$ |  Recovery     | 0.2 
-$\alpha$ |  Death from Infection | 0.001
-$\omega$ |  Waning Immunity | 0.01
+--- | --- | ---  
+$\beta$       |  Transmission | 0.6 
+$\sigma$      |  Infectious   | 0.175 
+$\gamma$      |  Recovery     | 0.2 
+$\alpha$      |  Death from Infection | 0.001
+$\omega$      |  Waning Immunity | 0.01
 
 
 
