@@ -1,25 +1,39 @@
 ---
 title: "Modelling the persistence of infectious diseases in pre-agricultural Hunter-gatherers"
-subtitle: "Condensed Report"
+subtitle: "Final Analysis Report"
 author: "Matthew Hoyle"
-output: html_notebook
+output: 
+  html_notebook:
+    toc: true
+    toc_float:
+      collapsed: true
+      smooth_scroll: false
+    theme: yeti
+    highlight: pygments
 ---
 ## Set-up
 ```{r}
 # rm(list = ls())
-library(dplyr)
 library(wesanderson)
 library(GillespieSSA)
 library(tidyverse)
 ```
 
+## Background
+
+ The traditionally held belief that most modern infectious diseases emerged when humans began living in larger agricultural settlements has been challenged by studies of modern hunter-gatherers. This study will investigate which emerging pathogens may persist in hunter-gatherer groups by constructing a compartment model of infectious disease transmission that accounts for demography and multi-band structure. This study will look to understand how the critical community size required to sustain an outbreak is affected by host population dynamics. We show that metapopulation structure increases the probability of a respiratory pathogen with waning immunity persisting after 3 years. The probability of persistence increases with the number of sub-populations but is largely determined by the duration of immunity. Understanding the origins of infectious diseases is an important area of research that will lead to improved strategies for reducing their global burden.
+
+This report will cover the full analysis undertaken to generate the results used in my MSc project. A full description of the research project aims and methods can be found in the final paper in the [`Hunter_Gatherer_models`](https://github.com/matthewhoyle/Hunter_Gatherer_models) GitHub repository.  Some code used in this project was adapted from the tutorials attached to the `GillespieSSA` package. 
+
 ## Model Parameter estimation
 
 ### Agta Hunter-Gatherer Demography
 
-Information regarding births, deaths and population size were obtain from a study conducted by Headland et al., (2011). Authors conducted a census-like survey of the 
+Modern-day hunter-gatherers are often used to make inferences about pre-agricultural human populations. This study modeled the host population on a group of indigenous hunter-gatherers from the Northern Phillipines known as the Agta. Information regarding births, deaths and population size were obtain from a study conducted by Headland et al., (2011). Authors conducted a census-like survey of the Agta that followed $\sim$4,300 individuals over the period of 1950-2010. This date was first explored to understand Agta demography.
+
+
 ```{r}
-agta_demo <- read.csv("AgtaPopDynamics_Headland2007.csv")
+agta_demo <- read.csv("Agta_Data/AgtaPopDynamics_Headland2007.csv")
 
 ggplot(agta_demo, aes(x=Year)) +
   geom_line(aes(y=PopSize), colour = wes_palettes$Darjeeling1[1]) +
@@ -47,6 +61,9 @@ summary(agta_demo$Deaths)
 ```
 
 #### Birth/Death rate per person per day
+
+Birth rate was estimated from this data by taking the mean of the annual number of births divided by two times the annual number of females. This was then scaled appropriately to obtain the daily mean birth rate per person. 
+
 ```{r warning=FALSE}
 agta_demo <- agta_demo %>%
   mutate(Birth_rate = Births/(Female*2),
@@ -80,9 +97,12 @@ demo_sum <- as.list(demo_sum)
 ```
 
 ### Agta Band Size
+
+Data regarding camp size of Agta hunter-gatherers was obtained from a study of 615 individuals from 15 camps in in the municipality of Palanan, the Northern Philippines published by Dyble et al. (2021).
+
 ```{r}
 # Import Camp data from Mark Dyble
-camps.data <- read_csv("camps.csv")
+camps.data <- read_csv("Agta_Data/camps.csv")
 
 head(camps.data)
 ```
@@ -101,10 +121,55 @@ camp.size <- camps.data %>%
 camp.size
 ```
 
+### Pathogen X
+
+For the purpose of this investigation we formulated a hypothetical respiratory pathogen, referred to as pathogen X. Taking into account the biological trade-offs between high transmissibility and high pathogenicity, pathogen X was decided to be highly infectious with a relatively low case fatality rate of 0.005. Transmission occurred via close contact with an infected individual. Infection was characterised by a latent period of 5.7 days followed by an infectious period of 5 days. Individuals who recovered from infection were immune for 100 days, after which immunity waned and individuals became susceptible to re-infection. Based on these characteristics, the parameters in table 1 were assumed and input into the final models.
+
+**Parameter** | **Rate** | **Value**
+ --- | --- | ---  
+$\beta$  |  Transmission | 0.6 
+$\sigma$ |  Infectious   | 0.175 
+$\gamma$ |  Recovery     | 0.2 
+$\alpha$ |  Death from Infection | 0.001
+$\omega$ |  Waning Immunity | 0.01
+
+
 
 ## Single Population Model
 
-### Set-up
+To investigate the persistence of a hypothetical respiratory pathogen in hunter-gatherers, this study chose to simulate disease transmission using a compartment model approach as outlined in the introduction. Two models were constructed to investigate compare the effect of metapopulation structure on disease persistence. This first describes the transmission of a pathogen within a single population with demography and waning immunity to re-infection over time.
+
+
+\
+<center>
+
+
+![*Figure 1 - Flow diagram of SEIRS model of transmission*](Plots/SEIRS_Flow_Diagram.png)
+
+
+</center>
+\
+\
+\
+
+\begin{align*}
+  \frac{{{\mathrm{d}}S}}{{{\mathrm{d}}t}} & = \underbrace {\mu N}_{{\mathrm{birth}}}~ - ~\underbrace {\frac{\beta SI}{N}}_{{\mathrm{infection}}}~~ + \underbrace {\omega R}_{{\mathrm{lost}}\,{\mathrm{immunity}}} - \underbrace {\mu S}_{{\mathrm{death}}} \\
+  \frac{{{\mathrm{d}}E}}{{{\mathrm{d}}t}} & = \underbrace {\frac{\beta SI}{N}}_{{\mathrm{infection}}}~ - ~\underbrace {\sigma E}_{{\mathrm{latency}}} - \underbrace {\mu E}_{{\mathrm{death}}} \\
+  \frac{{{\mathrm{d}}I}}{{{\mathrm{d}}t}} & = \underbrace {\sigma E}_{{\mathrm{latency}}} - \underbrace {\gamma I}_{{\mathrm{recovery}}} - ~\underbrace {\left( {\mu + \alpha } \right)I}_{{\mathrm{death}}} \\
+  \frac{{{\mathrm{d}}R}}{{{\mathrm{d}}t}} & = \underbrace {\gamma I}_{{\mathrm{recovery}}} - \underbrace {\omega R}_{{\mathrm{lost}}\ {\mathrm{immunity}}} - \underbrace {\mu R}_{{\mathrm{death}}}
+\end{align*}
+
+\
+\
+
+
+Where transmission is frequency dependent, ${\frac{\beta SI}{N}}$, $\frac{1}{\sigma}$ is the duration of the latent phase, $\frac{1}{\gamma}$ is the duration of infection, $\frac{1}{\omega}$ is the duration of immunity and death from infection occurs at the rate $\alpha$. Individuals can be born into S and die naturally from any compartment at a rate of $\mu$.
+
+
+
+### Model Set-up
+
+Model was set up with a single randomly selected camp size with a single infected individual and parameters for pathogen X. 
 
 ```{r}
 # Define Paramenters
@@ -172,7 +237,7 @@ CCS <- function(epsilon, R0) {
 }
 ```
 
-### Single Population Model
+### Run Single Population Model
 ```{r}
 
 # Calculate R0, expected number of infecteds at equilibrium, magnitude of oscillation and CCS
@@ -231,7 +296,7 @@ ggsave(filename = "single_plot.pdf",
        device = "pdf",
        width = 7, 
        height = 3,
-       path = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models")
+       path = "/Users/matthewhoyle/Github_R_projects/Plots/Hunter_Gatherer_models")
 ```
 
 ```{r}
@@ -239,7 +304,7 @@ plot_data %>%
   filter(state == "I") %>%
   slice_max(count)
 ```
-
+Outbreak peaked at day 25 with 14 infected individuals.
 
 ```{r}
 ## Run multiple simulations and saving output
@@ -297,7 +362,7 @@ sim_output <- sim_output %>%
   mutate(percent_persist = total_I/(total_N)*100,
          persist = case_when(total_I > 0 ~ T, 
                                total_I == 0 ~ F))
-sim_output
+head(sim_output)
 
 # Make Summary Table of output
 sim_summary <- sim_output %>%
@@ -307,7 +372,10 @@ sim_summary <- sim_output %>%
   mutate(omega = 1/100)
 sim_summary
 ```
-### Varying waining immunity
+
+### Varying waining immunity {.tabset .tabset-fade .tabset-pills}
+Waning immunity was thought to play an important role in the persistence of pathogen X so we incrementally increased the duration of immunity (by decreasing $\omega$) and calculated the probability of persistence after 3 years in 1000 stochastic simulations. Duration of immunity was increased from 1 day to a year.
+
 #### 0 Days
 ```{r}
 #Collect parameters
@@ -1868,9 +1936,10 @@ waning_results_single <- sim_summary %>%
   bind_rows(sim_summary_365) %>%
   mutate(immunity_duration = 1/omega) %>%
   arrange(immunity_duration) %>%
-  mutate(model="single")
+  mutate(model="single",
+         patches = 1)
 
-write_csv(waning_results_single, file = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models/waning_results_single.csv")
+write_csv(waning_results_single, file = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models/Results/waning_results_single.csv")
 
 waning_results_single
 
@@ -1886,9 +1955,25 @@ ggplot(waning_results_single, aes(immunity_duration, sum_persist)) +
 
 
 
-## Metapopulation Model 
+## 7-Patch Metapopulation Model 
 
-###Set-up
+Recent studies have suggested that pre-agricultural hunter-gatherers did not live in small isolated groups but fromed interconnected multi-camp networks. To investigate this we built a second population that accounts for metapopulation structure of hunter-gatherers. The second model follows an almost identical format as the single population model, but instead has been expanded to accommodate the metapopulation structure of multi-band hunter-gatherer groups:
+
+
+\begin{align*}
+\frac{{{\mathrm{d}}S}}{{{\mathrm{d}}t}} & = \underbrace {\mu_i N_i}_{{\mathrm{birth}}}~ - ~\underbrace {\biggl(\frac{\beta_{ii} I_i}{N_i} + \frac{\beta_{ji} I_j} {N_j} + ... \biggr)S_i}_{{\mathrm{infection}}}~~ + \underbrace {\omega_i R_i}_{{\mathrm{lost}}\,{\mathrm{immunity}}} - \underbrace {\mu_i S_i}_{{\mathrm{death}}} \\
+\frac{{{\mathrm{d}}E}}{{{\mathrm{d}}t}} & = \underbrace {\biggl(\frac{\beta_{ii} I_i}{N_i} + \frac{\beta_{ji} I_j} {N_j} + ... \biggr)S_i}_{{\mathrm{infection}}}~ - ~\underbrace {\sigma_i E_i}_{{\mathrm{latency}}} - \underbrace {\mu_i E_i}_{{\mathrm{death}}} \\
+\frac{{{\mathrm{d}}I}}{{{\mathrm{d}}t}} & = \underbrace {\sigma_i E_i}_{{\mathrm{latency}}} - \underbrace {\gamma_i I_i}_{{\mathrm{recovery}}} - ~\underbrace {\left( {\mu_i + \alpha_i } \right)I_i}_{{\mathrm{death}}} \\
+\frac{{{\mathrm{d}}R}}{{{\mathrm{d}}t}} & = \underbrace {\gamma_i I_i}_{{\mathrm{recovery}}} - \underbrace {\omega_i R_i}_{{\mathrm{lost}}\ {\mathrm{immunity}}} - \underbrace {\mu_i R_i}_{{\mathrm{death}}}
+\end{align*}
+
+These coupled differential equations describe the within-patch SEIRS-type dynamics of the $i$th patch where the force of infection is driven by contact of susceptibles with infecteds within the $i$th patch and in the $j$th other patches. Both models assume that compartments are well-mixed and that the waiting times between compartments are exponentially distributed. 
+
+
+
+
+### Model Set-up
+We first modeled transmission in a metapopulation of 7 camps, as observed by Migliano et al. (2023), with one initially infected individual from a randomly selected patch. 
 
 ```{r}
 # Define Paramenters
@@ -1955,6 +2040,7 @@ a_meta <-
 
 ```
 
+
 Define functions for calculating R0 from next-generation matrix
 ```{r}
 # Calculate R0 from NGM
@@ -1974,7 +2060,7 @@ beta.ngm <- function(beta_matrix) {
 
 
 
-### Metapopulation Model
+### Run Metapopulation Model
 ```{r}
 #Collect parameters
 parms_meta <- list(
@@ -2045,12 +2131,12 @@ plot_meta <- ggplot(data = plot_data_meta, aes(x=t, y=count, colour=state))+
   theme_bw()
 plot_meta
 
-ggsave(filename = "meta_plot.pdf", 
+ggsave(filename = "meta_plot_7.pdf", 
        plot = plot_meta,
        device = "pdf",
        width = 7, 
        height = 8,
-       path = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models")
+       path = "/Users/matthewhoyle/Github_R_projects/Plots/Hunter_Gatherer_models")
 ```
 
 ```{r}
@@ -2175,7 +2261,9 @@ sim_summary_meta <- sim_output_meta %>%
 sim_summary_meta
 ```
 
-### Varying waining immunity
+
+
+### Varying waining immunity {.tabset .tabset-fade .tabset-pills}
 #### 0 Days
 ```{r}
 #Collect parameters
@@ -4617,7 +4705,7 @@ Single
 
 #### Results
 ```{r}
-waning_results <- sim_summary_meta %>%
+waning_results_7 <- sim_summary_meta %>%
   bind_rows(sim_summary_meta_3) %>%
   bind_rows(sim_summary_meta_7) %>%
   bind_rows(sim_summary_meta_10) %>%
@@ -4639,16 +4727,17 @@ waning_results <- sim_summary_meta %>%
   bind_rows(sim_summary_meta_365) %>%
   mutate(immunity_duration = 1/omega) %>%
   arrange(immunity_duration) %>%
-  mutate(model = "meta")
+  mutate(model = "meta",
+         patches = 7)
 
-write_csv(waning_results, file = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models/waning_results.csv")
+write_csv(waning_results_7, file = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models/Results/waning_results_7.csv")
 
-waning_results
+waning_results_7
 
 ```
 
 ```{r}
-ggplot(waning_results, aes(immunity_duration, sum_persist)) +
+ggplot(waning_results_7, aes(immunity_duration, sum_persist)) +
   geom_line()+
   geom_point()+
   theme_bw()
@@ -4657,7 +4746,9 @@ ggplot(waning_results, aes(immunity_duration, sum_persist)) +
 
 
 
-## 3 Metapopulation Model 
+## 3-Patch Metapopulation Model 
+
+The same metapopulation SEIRS model was then used to model the dynamics of persistence in a 3-patch system and understand the effect of waning immunity.
 
 ###Set-up
 
@@ -4728,7 +4819,7 @@ a_3_meta <-
 
 
 
-### Metapopulation Model
+### Run Metapopulation Model
 ```{r}
 #Collect parameters
 parms_3_meta <- list(
@@ -4799,12 +4890,12 @@ plot_3_meta <- ggplot(data = plot_data_3_meta, aes(x=t, y=count, colour=state))+
   theme_bw()
 plot_3_meta
 
-ggsave(filename = "meta_plot.pdf", 
+ggsave(filename = "meta_plot_3.pdf", 
        plot = plot_3_meta,
        device = "pdf",
        width = 7, 
        height = 8,
-       path = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models")
+       path = "/Users/matthewhoyle/Github_R_projects/Plots/Hunter_Gatherer_models")
 ```
 
 ```{r}
@@ -4929,7 +5020,7 @@ sim_summary_3_meta <- sim_output_3_meta %>%
 sim_summary_3_meta
 ```
 
-### Varying waining immunity
+### Varying waining immunity {.tabset .tabset-fade .tabset-pills}
 #### 0 Days
 ```{r}
 #Collect parameters
@@ -7396,7 +7487,7 @@ waning_results_3 <- sim_summary_3_meta %>%
   mutate(model = "meta",
          patches = 3)
 
-write_csv(waning_results_3, file = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models/waning_results_3.csv")
+write_csv(waning_results_3, file = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models/Results/waning_results_3.csv")
 
 waning_results_3
 
@@ -7415,6 +7506,9 @@ ggplot(waning_results_3, aes(immunity_duration, sum_persist)) +
 
 
 ## 14 Metapopulation Model 
+
+The same metapopulation SEIRS model was then used to model the dynamics of persistence in a 14-patch system and understand the effect of waning immunity.
+
 
 ###Set-up
 
@@ -7485,7 +7579,7 @@ a_14_meta <-
 
 
 
-### Metapopulation Model
+### Run Metapopulation Model
 ```{r}
 #Collect parameters
 parms_14_meta <- list(
@@ -7549,7 +7643,7 @@ plot_data_14_meta <- out_14_meta$data %>%
 
 plot_14_meta <- ggplot(data = plot_data_14_meta, aes(x=t, y=count, colour=state))+
   geom_line(alpha=0.8)+
-  facet_wrap(~factor(patch, levels = unique(patch)) ,ncol = 1, scales = "free_y")+
+  facet_wrap(~factor(patch, levels = unique(patch)) ,ncol = 3, scales = "free_y")+
   labs(x="Time (Days)",
        y="Number of Individuals",
        colour="State")+
@@ -7561,7 +7655,7 @@ ggsave(filename = "meta_14_plot.pdf",
        device = "pdf",
        width = 7, 
        height = 8,
-       path = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models")
+       path = "/Users/matthewhoyle/Github_R_projects/Plots/Hunter_Gatherer_models")
 ```
 
 ```{r}
@@ -7686,7 +7780,7 @@ sim_summary_14_meta <- sim_output_14_meta %>%
 sim_summary_14_meta
 ```
 
-### Varying waining immunity
+### Varying waining immunity {.tabset .tabset-fade .tabset-pills}
 #### 0 Days
 ```{r}
 #Collect parameters
@@ -9797,7 +9891,7 @@ waning_results_14 <- sim_summary_14_meta %>%
   mutate(model = "meta",
          patches = 14)
 
-write_csv(waning_results_14, file = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models/waning_results_14.csv")
+write_csv(waning_results_14, file = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models/Results/waning_results_14.csv")
 
 waning_results_14
 
@@ -9812,19 +9906,20 @@ ggplot(waning_results_14, aes(immunity_duration, sum_persist)) +
 
 
 ## Combined Results
+
+Results from sinale and metapopulation models were comined into one data frame and visualised. 
+
 ```{r}
-#combined_waning <- waning_results %>%
-  #bind_rows(waning_results_single)
+combined_waning <- waning_results %>%
+  bind_rows(waning_results_single) %>%
+  bind_rows(waning_results_7) %>%
+  bind_rows(waning_results_3) %>%
+  bind_rows(waning_results_14)
 
-#combined_waning
+head(combined_waning)
 
 
-#combined_waning <- read_csv("combined_waning_results.csv") %>%
-  #mutate(patches = case_when(model == "meta" ~ 7,
-                             #model == "single" ~ 1)) %>%
-  #bind_rows(waning_results_14)
-
-#write_csv(combined_waning, file = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models/combined_waning_results.csv")
+#write_csv(combined_waning, file = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models/Results/combined_waning_results.csv")
 
 ```
 
@@ -9849,7 +9944,7 @@ combined_plot <- ggplot(combined_waning, aes(immunity_duration, sum_persist, col
 
 combined_plot
 
-ggsave(filename = "combined_plot_patches.pdf", plot = combined_plot, device = "pdf", width = 7, height = 5, path = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models")
+ggsave(filename = "combined_plot_patches.pdf", plot = combined_plot, device = "pdf", width = 7, height = 5, path = "/Users/matthewhoyle/Github_R_projects/Plots/Hunter_Gatherer_models")
 ```
 
 ```{r}
@@ -9858,9 +9953,13 @@ ggplot(combined_waning, aes(immunity_duration, mean_percent_infected, colour = a
   geom_point() +
   labs(x = "Duration of immunity",
        y = "Proportion infected at endpoint (%)", 
-       colour = "Model Type")+
-  scale_color_discrete(type = wes_palette("Darjeeling1", type = "discrete")[1:2],
-                       labels = c("Metapopulation", "Single Population"))+
+       colour = "Patches")+
+  scale_color_discrete(type = wes_palettes$Zissou1[2:5],
+                       labels = c("1", "3", "7", "14"))+
   theme_bw()
 ```
+
+
+## References
+
 
