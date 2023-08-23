@@ -17,6 +17,7 @@ output:
 library(wesanderson)
 library(GillespieSSA)
 library(tidyverse)
+library(GA)
 ```
 
 ## Background
@@ -125,13 +126,13 @@ camp.size
 
 For the purpose of this investigation we formulated a hypothetical respiratory pathogen, referred to as pathogen X. Taking into account the biological trade-offs between high transmissibility and high pathogenicity, pathogen X was decided to be highly infectious with a relatively low case fatality rate of 0.005. Transmission occurred via close contact with an infected individual. Infection was characterised by a latent period of 5.7 days followed by an infectious period of 5 days. Individuals who recovered from infection were immune for 100 days, after which immunity waned and individuals became susceptible to re-infection. Based on these characteristics, the parameters in table 1 were assumed and input into the final models.
 
-**Parameter** | **Rate** | **Value**
---- | --- | ---  
-$\beta$       |  Transmission | 0.6 
-$\sigma$      |  Infectious   | 0.175 
-$\gamma$      |  Recovery     | 0.2 
+**Parameter** | **Rate**              | **Value**
+---           | ---                   | ---  
+$\beta$       |  Transmission         | 0.6 
+$\sigma$      |  Infectious           | 0.175 
+$\gamma$      |  Recovery             | 0.2 
 $\alpha$      |  Death from Infection | 0.001
-$\omega$      |  Waning Immunity | 0.01
+$\omega$      |  Waning Immunity      | 0.01
 
 
 
@@ -231,13 +232,34 @@ EIE <- function(R0, parms) {
   return(y)
 }
 
-CCS <- function(epsilon, R0) {
-  y = 1/((epsilon^2)*((1-(1/R0))^2))
+CCS <- function(infectious_period, R0) {
+  x = infectious_period/(23*365)           # Avg life life expexctancy of 23 (Gurven et al. 2007)
+  y = 1/((x^2)*((1-(1/R0))^2))
   return(y)
 }
 ```
 
-### Run Single Population Model
+### Calculate Epidemic Statistics
+The expected number of secondary cases from a single infected individual in an entirely susceptible population, also known as the basic reproduction number ($R_0$), was calculated for pathogen X in both the single and meta population model. In the single population SEIRS model, $R_0$ may be estimated~(Bjørnstad, 2023):
+
+\begin{equation}       
+    R_0 = \frac{\sigma}{\sigma + \mu}*\frac{\beta}{\gamma + \mu + \alpha}
+\end{equation}
+
+In the metapopulation model, the same equation was applied across the next-generation matrix and the eigenvalue calculated to infer $R_0$ across all patches. To provide an estimate for the number of individuals required to sustain endemic spread of pathogen X in a single population, I calculated the critical community size (CCS) (Diekmann, Heesterbeek, and Britton, 2012):
+
+\begin{equation}        
+    N_c = \frac{1}{\epsilon^2(1-\frac{1}{R_0})^2}
+\end{equation}
+
+Where $N_c$ is the CCS above which endemic spread may be sustained and $\epsilon$ is the ratio of the average length of the infectious period to the life expectancy of the host. The CCS represents the minimum population size required to prevent disease extinction. A crude average life expectancy of 23 years was used to describe Agta hunter-gatherers as published by~ Gurven and Kaplan (2007).
+
+The expected proportion of infected individuals at endemic equilibrium, $I^*$, was also calculated in the single population model~(Keeling and Rohani, 2008):
+
+\begin{equation}            
+    I^* = \frac{(R_0 - 1)\omega}{\gamma R_0}
+\end{equation}
+
 ```{r}
 
 # Calculate R0, expected number of infecteds at equilibrium, magnitude of oscillation and CCS
@@ -252,11 +274,38 @@ expexted_infecteds
 
 sqrt(N) # magnitude of oscillations 
 
-epsilon <- (5.7/365)/23 # duration of infection in years divided by avg life expectancy 
-CCS_single <- CCS(epsilon, R0_single) # Average life expectancy as per Kaplan (crude)
+CCS_single <- CCS(infectious_period = 5, R0 = R0_single) # Average life expectancy as per Kaplan (crude)
 CCS_single
 ```
+### Plot CCS by infectious period and R0
 
+Parameter space of CCS equation was explored with infectious period ranging from 5 to 365 days and $R_0$ ranging from 1.1 to 5. 
+
+```{r}
+infectious_periods <- seq(5, 365, 10)
+
+R0_seq <- seq(1.1,5,0.2)
+
+x = infectious_periods
+
+y = R0_seq
+
+z = log10(outer(x, y, CCS))
+
+persp3D(x, y, z,
+        zlim = c(0,10),
+        xlim = c(5, 365),
+        ylim = c(1, 5),
+        xlab = "Infectious Period (days)",
+        ylab = "Basic Reproductive number (R0)",
+        zlab = "log10(Critcal Community Size)",
+        shade =  0.15, theta = 140, phi = 30, expand = 0.6,
+        ticktype = "detailed")
+```
+
+
+
+### Run Single Population Model
 ```{r}
 # Run simulations with the Direct method
 set.seed(21)
@@ -291,12 +340,12 @@ single_plot <- ggplot(data = plot_data, aes(x=t, y=count, colour=state))+
 
 single_plot
 
-ggsave(filename = "single_plot.pdf", 
-       plot = single_plot,
-       device = "pdf",
-       width = 7, 
-       height = 3,
-       path = "/Users/matthewhoyle/Github_R_projects/Plots/Hunter_Gatherer_models")
+#ggsave(filename = "single_plot.pdf", 
+       #plot = single_plot,
+       #device = "pdf",
+       #width = 7, 
+       #height = 3,
+       #path = "/Users/matthewhoyle/Github_R_projects/Plots/Hunter_Gatherer_models")
 ```
 
 ```{r}
@@ -1858,9 +1907,9 @@ sim_list_365 <- vector("list", length = num_sims)
 for (i in 1:num_sims){
   set.seed(i)
   
-  N <-     sample(camps.data$camp_total, 1)    # Sample different patch sizes for each sim
+ N_a <-     sample(camps.data$camp_total, 1)    # Sample different patch sizes for each sim
   
-  x0 <- c(N - initial_infected, initial_infected, 0, 0, N)
+  x0 <- c(N_a - initial_infected, initial_infected, 0, 0,N_a)
 
   names(x0) <- c("S","E","I", "R", "N")
 
@@ -7454,9 +7503,6 @@ sim_summary_3_meta_365 <- sim_output_3_meta_365 %>%
 sim_summary_3_meta_365
 ```
 
-Single
-
-
 
 
 
@@ -9925,6 +9971,8 @@ head(combined_waning)
 
 
 ```{r}
+pal <- wes_palette(4, name = "Zissou1", type = "continuous")
+
 combined_plot <- ggplot(combined_waning, aes(immunity_duration, sum_persist, colour = as.factor(patches)))+
   geom_line(alpha=0.7, size=1)+
   geom_point(alpha=0.5, size=2)+
@@ -9938,13 +9986,13 @@ combined_plot <- ggplot(combined_waning, aes(immunity_duration, sum_persist, col
   labs(x = "Duration of immunity (days)",
        y = "Probability of persistence after 3 years (%)", 
        colour = "No. Patches")+
-  scale_color_discrete(type = wes_palettes$Zissou1[2:5],
+  scale_color_discrete(type = pal,
                        labels = c("1", "3", "7", "14"))+
   theme_bw()
 
 combined_plot
 
-ggsave(filename = "combined_plot_patches.pdf", plot = combined_plot, device = "pdf", width = 7, height = 5, path = "/Users/matthewhoyle/Github_R_projects/Plots/Hunter_Gatherer_models")
+ggsave(filename = "combined_plot_patches.pdf", plot = combined_plot, device = "pdf", width = 7, height = 5, path = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models/Plots")
 ```
 
 ```{r}
@@ -9954,9 +10002,4729 @@ ggplot(combined_waning, aes(immunity_duration, mean_percent_infected, colour = a
   labs(x = "Duration of immunity",
        y = "Proportion infected at endpoint (%)", 
        colour = "Patches")+
-  scale_color_discrete(type = wes_palettes$Zissou1[2:5],
+  scale_color_discrete(type = pal,
                        labels = c("1", "3", "7", "14"))+
   theme_bw()
+```
+
+
+## 3-Patch Single Population
+
+3 more single population models were ran to understand if the increased probability of persistence was being caused by increasing population size. These models were the same as the initial single poulation model, but instead $N$ was increased to the sum of 3, 7, or 14 randomly sampled campsizes from Dyble et al. (2021).
+
+### Model Set-up
+
+Model was set up with a single randomly selected camp size with a single infected individual and parameters for pathogen X. 
+
+```{r}
+# Define Paramenters
+N_a <-    sum(sample(camps.data$camp_total, 3))    # Total Population size of three camps
+initial_infected <-  1    # Initial infected
+simName <- "SEIRS model"       # Simulation name
+tf <- 365*3
+
+#Collect parameters
+parms <- list(
+  beta = 0.6,
+  sigma = 0.175,                          # E to I rate
+  gamma = 0.2,                           # I to R rate
+  omega = 1/100,                         # R to S rate
+  mu = demo_sum$Birth_rate_daily_Mean,                            # Birth/death rate per person per day
+  alpha = 1/1000) 
+
+#Create the named initial state vector for the U-patch system.
+
+x0_a <- c(N_a - initial_infected, initial_infected, 0, 0, N_a)
+
+names(x0_a) <- c("S","E","I", "R", "N")
+
+
+# Define the state change matrix for a single patch
+nu <- matrix(c( -1,  0,  0, +1, +1, -1,  0,  0,  0,  0, # S
+                +1, -1,  0,  0,  0,  0, -1,  0,  0,  0, # E
+                0, +1, -1,  0,  0,  0,  0, -1,  0, -1, # I
+                0,  0, +1, -1,  0,  0,  0,  0, -1,  0, # R 
+                0,  0,  0,  0, +1, -1 ,-1, -1, -1, -1), # N
+             nrow=5,byrow=TRUE)
+
+# Define propensity functions
+a <-c(
+        paste0("(beta*I/N)*S"), # Infection
+        paste0("sigma*E"),                                       # Becomes infecious
+        paste0("gamma*I"),                                       # Recovery from infection
+        paste0("omega*R"),       # Loss of immunity
+        paste0("mu*N"),                             # Births
+        paste0("mu*S"),                                             # Deaths (S)
+        paste0("mu*E"),                                             # Deaths (E)
+        paste0("mu*I"),                                             # Deaths (I)
+        paste0("mu*R"),                                             # Deaths (R)
+        paste0("alpha*I")                                           # Deaths from infection
+        
+      )
+
+```
+
+
+### Run Single Population Model
+```{r}
+
+EIE_single <- EIE(R0_single, parms) # proportion of expected infecteds at equilibrium
+EIE_single
+
+expexted_infecteds <- EIE_single*N_a # number of expected infecteds at equilibrium
+expexted_infecteds
+
+sqrt(N_a) # magnitude of oscillations 
+```
+
+```{r}
+# Run simulations with the Direct method
+set.seed(21)
+out_a <- ssa(
+  x0 = x0_a,
+  a = a,
+  nu = nu,
+  parms = parms,
+  tf = tf,
+  method = ssa.d(),
+  simName = simName,
+  verbose = FALSE,
+  consoleInterval = 1
+) 
+
+
+
+## Extra Plots
+plot_data_a <- out_a$data %>%
+  as_tibble() %>%
+  pivot_longer(!t, names_to = "state", values_to = "count") %>%
+  mutate(state = factor(state, levels = c("S", "E", "I", "R", "N"))) #%>%
+  #filter(state != "N")
+
+single_plot_a <- ggplot(data = plot_data_a, aes(x=t, y=count, colour=state))+
+  geom_line(alpha=0.8)+
+  labs(x="Time (Days)",
+       y="Number of Individuals", 
+       colour="State")+
+  geom_hline(yintercept = expexted_infecteds, linetype = 'dashed') +
+  theme_bw()
+
+single_plot_a
+```
+
+```{r}
+plot_data_a %>%
+  filter(state == "I") %>%
+  slice_max(count)
+```
+Outbreak peaked at day 32 with 31 infected individuals.
+
+```{r}
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_a <- list()
+sim_list_a <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  
+  N_a <-     sum(sample(camps.data$camp_total, 3))    # Sample different patch sizes for each sim
+  
+  x0_a <- c(N_a - initial_infected, initial_infected, 0, 0, N_a)
+
+  names(x0_a) <- c("S","E","I", "R", "N")
+
+
+  set.seed(i)
+  out_100_a <- ssa(
+    x0 = x0_a,
+    a = a,
+    nu = nu,
+    parms = parms,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_a <- out_100_a$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_a[[i]] <- sim_data_a
+}
+
+sim_output_a <- bind_rows(sim_list_a)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_a <- sim_output_a %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+head(sim_output_a)
+
+# Make Summary Table of output
+sim_summary_a <- sim_output_a %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100, 
+            mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/100)
+sim_summary_a
+```
+
+### Varying waining immunity {.tabset .tabset-fade .tabset-pills}
+Waning immunity was thought to play an important role in the persistence of pathogen X so we incrementally increased the duration of immunity (by decreasing $\omega$) and calculated the probability of persistence after 3 years in 1000 stochastic simulations. Duration of immunity was increased from 1 day to a year.
+
+#### 0 Days
+```{r}
+#Collect parameters
+parms_0 <- parms
+parms_0$omega <- 0
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_0_a <- list()
+sim_list_0_a <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_a <-     sum(sample(camps.data$camp_total, 3))    # Sample different patch sizes for each sim
+  
+  x0_a <- c(N_a - initial_infected, initial_infected, 0, 0, N_a)
+
+  names(x0_a) <- c("S","E","I", "R", "N")
+
+
+  out_100_0_a <- ssa(
+    x0 = x0_a,
+    a = a,
+    nu = nu,
+    parms = parms_0,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_0_a <- out_100_0_a$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_0_a[[i]] <- sim_data_0_a
+}
+
+sim_output_0_a <- bind_rows(sim_list_0_a)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_0_a <- sim_output_0_a %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_0_a
+
+# Make Summary Table of output
+sim_summary_0_a <- sim_output_0_a %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 0)
+sim_summary_0_a
+```
+
+
+
+
+#### 1 Days
+```{r}
+#Collect parameters
+parms_1 <- parms
+parms_1$omega <- 1
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_1_a <- list()
+sim_list_1_a <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_a <-     sum(sample(camps.data$camp_total, 3))    # Sample different patch sizes for each sim
+  
+  x0_a <- c(N_a - initial_infected, initial_infected, 0, 0, N_a)
+
+  names(x0_a) <- c("S","E","I", "R", "N")
+
+
+  out_100_1_a <- ssa(
+    x0 = x0_a,
+    a = a,
+    nu = nu,
+    parms = parms_1,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_1_a <- out_100_1_a$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_1_a[[i]] <- sim_data_1_a
+}
+
+sim_output_1_a <- bind_rows(sim_list_1_a)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_1_a <- sim_output_1_a %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_1_a
+
+# Make Summary Table of output
+sim_summary_1_a <- sim_output_1_a %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1)
+sim_summary_1_a
+```
+
+
+
+
+
+#### 3 Days
+```{r}
+#Collect parameters
+parms_3 <- parms
+parms_3$omega <- 1/3
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_3_a <- list()
+sim_list_3_a <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_a <-     sum(sample(camps.data$camp_total, 3))    # Sample different patch sizes for each sim
+  
+  x0_a <- c(N_a - initial_infected, initial_infected, 0, 0, N_a)
+
+  names(x0_a) <- c("S","E","I", "R", "N")
+
+
+  out_100_3_a <- ssa(
+    x0 = x0_a,
+    a = a,
+    nu = nu,
+    parms = parms_3,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_3_a <- out_100_3_a$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_3_a[[i]] <- sim_data_3_a
+}
+
+sim_output_3_a <- bind_rows(sim_list_3_a)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_3_a <- sim_output_3_a %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_3_a
+
+# Make Summary Table of output
+sim_summary_3_a <- sim_output_3_a %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/3)
+sim_summary_3_a
+```
+
+#### 7 Days
+```{r}
+#Collect parameters
+parms_7 <- parms
+parms_7$omega <- 1/7
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_7_a <- list()
+sim_list_7_a <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_a <-     sum(sample(camps.data$camp_total, 3))   # Sample different patch sizes for each sim
+  
+  x0_a <- c(N_a - initial_infected, initial_infected, 0, 0, N_a)
+
+  names(x0_a) <- c("S","E","I", "R", "N")
+
+
+  out_100_7_a <- ssa(
+    x0 = x0_a,
+    a = a,
+    nu = nu,
+    parms = parms_7,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_7_a <- out_100_7_a$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_7_a[[i]] <- sim_data_7_a
+}
+
+sim_output_7_a <- bind_rows(sim_list_7_a)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_7_a <- sim_output_7_a %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_7_a
+
+# Make Summary Table of output
+sim_summary_7_a <- sim_output_7_a %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/7)
+sim_summary_7_a
+```
+
+#### 10 Days
+```{r}
+#Collect parameters
+parms_10 <- parms
+parms_10$omega <- 1/10
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_10_a <- list()
+sim_list_10_a <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_a <-     sum(sample(camps.data$camp_total, 3))    # Sample different patch sizes for each sim
+  
+  x0_a <- c(N_a - initial_infected, initial_infected, 0, 0, N_a)
+
+  names(x0_a) <- c("S","E","I", "R", "N")
+
+
+  out_100_10_a <- ssa(
+    x0 = x0_a,
+    a = a,
+    nu = nu,
+    parms = parms_10,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_10_a <- out_100_10_a$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_10_a[[i]] <- sim_data_10_a
+}
+
+sim_output_10_a <- bind_rows(sim_list_10_a)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_10_a <- sim_output_10_a %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_10_a
+
+# Make Summary Table of output
+sim_summary_10_a <- sim_output_10_a %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/10)
+sim_summary_10_a
+```
+
+#### 20 Days
+```{r}
+#Collect parameters
+parms_20 <- parms
+parms_20$omega <- 1/20
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_20_a <- list()
+sim_list_20_a <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_a <-     sum(sample(camps.data$camp_total, 3))    # Sample different patch sizes for each sim
+  
+  x0_a <- c(N_a - initial_infected, initial_infected, 0, 0, N_a)
+
+  names(x0_a) <- c("S","E","I", "R", "N")
+
+
+  out_100_20_a <- ssa(
+    x0 = x0_a,
+    a = a,
+    nu = nu,
+    parms = parms_20,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_20_a <- out_100_20_a$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_20_a[[i]] <- sim_data_20_a
+}
+
+sim_output_20_a <- bind_rows(sim_list_20_a)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_20_a <- sim_output_20_a %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_20_a
+
+# Make Summary Table of output
+sim_summary_20_a <- sim_output_20_a %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/20)
+sim_summary_20_a
+```
+
+#### 30 Days
+```{r}
+#Collect parameters
+parms_30 <- parms
+parms_30$omega <- 1/30
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_30_a <- list()
+sim_list_30_a <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_a <-     sum(sample(camps.data$camp_total, 3))    # Sample different patch sizes for each sim
+  
+  x0_a <- c(N_a - initial_infected, initial_infected, 0, 0, N_a)
+
+  names(x0_a) <- c("S","E","I", "R", "N")
+
+
+  out_100_30_a <- ssa(
+    x0 = x0_a,
+    a = a,
+    nu = nu,
+    parms = parms_30,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_30_a <- out_100_30_a$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_30_a[[i]] <- sim_data_30_a
+}
+
+sim_output_30_a <- bind_rows(sim_list_30_a)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_30_a <- sim_output_30_a %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_30_a
+
+# Make Summary Table of output
+sim_summary_30_a <- sim_output_30_a %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/30)
+sim_summary_30_a
+```
+
+#### 40 Days
+```{r}
+#Collect parameters
+parms_40 <- parms
+parms_40$omega <- 1/40
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_40_a <- list()
+sim_list_40_a <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_a <-     sum(sample(camps.data$camp_total, 3))    # Sample different patch sizes for each sim
+  
+  x0_a <- c(N_a - initial_infected, initial_infected, 0, 0, N_a)
+
+  names(x0_a) <- c("S","E","I", "R", "N")
+
+
+  out_100_40_a <- ssa(
+    x0 = x0_a,
+    a = a,
+    nu = nu,
+    parms = parms_40,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_40_a <- out_100_40_a$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_40_a[[i]] <- sim_data_40_a
+}
+
+sim_output_40_a <- bind_rows(sim_list_40_a)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_40_a <- sim_output_40_a %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_40_a
+
+# Make Summary Table of output
+sim_summary_40_a <- sim_output_40_a %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/40)
+sim_summary_40_a
+```
+
+#### 50 Days
+```{r}
+#Collect parameters
+parms_50 <- parms
+parms_50$omega <- 1/50
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_50_a <- list()
+sim_list_50_a <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_a <-     sum(sample(camps.data$camp_total, 3))    # Sample different patch sizes for each sim
+  
+  x0_a <- c(N_a - initial_infected, initial_infected, 0, 0, N_a)
+
+  names(x0_a) <- c("S","E","I", "R", "N")
+
+
+  out_100_50_a <- ssa(
+    x0 = x0_a,
+    a = a,
+    nu = nu,
+    parms = parms_50,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_50_a <- out_100_50_a$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_50_a[[i]] <- sim_data_50_a
+}
+
+sim_output_50_a <- bind_rows(sim_list_50_a)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_50_a <- sim_output_50_a %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_50_a
+
+# Make Summary Table of output
+sim_summary_50_a <- sim_output_50_a %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/50)
+sim_summary_50_a
+```
+
+#### 60 Days
+```{r}
+#Collect parameters
+parms_60 <- parms
+parms_60$omega <- 1/60
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_60_a <- list()
+sim_list_60_a <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_a <-     sum(sample(camps.data$camp_total, 3))    # Sample different patch sizes for each sim
+  
+  x0_a <- c(N_a - initial_infected, initial_infected, 0, 0, N_a)
+
+  names(x0_a) <- c("S","E","I", "R", "N")
+
+
+  out_100_60_a <- ssa(
+    x0 = x0_a,
+    a = a,
+    nu = nu,
+    parms = parms_60,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_60_a <- out_100_60_a$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_60_a[[i]] <- sim_data_60_a
+}
+
+sim_output_60_a <- bind_rows(sim_list_60_a)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_60_a <- sim_output_60_a %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_60_a
+
+# Make Summary Table of output
+sim_summary_60_a <- sim_output_60_a %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/60)
+sim_summary_60_a
+```
+
+#### 70 Days
+```{r}
+#Collect parameters
+parms_70 <- parms
+parms_70$omega <- 1/70
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_70_a <- list()
+sim_list_70_a <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_a <-     sum(sample(camps.data$camp_total, 3))    # Sample different patch sizes for each sim
+  
+  x0_a <- c(N_a - initial_infected, initial_infected, 0, 0, N_a)
+
+  names(x0_a) <- c("S","E","I", "R", "N")
+
+
+  out_100_70_a <- ssa(
+    x0 = x0_a,
+    a = a,
+    nu = nu,
+    parms = parms_70,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_70_a <- out_100_70_a$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_70_a[[i]] <- sim_data_70_a
+}
+
+sim_output_70_a <- bind_rows(sim_list_70_a)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_70_a <- sim_output_70_a %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_70_a
+
+# Make Summary Table of output
+sim_summary_70_a <- sim_output_70_a %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist)/num_sims)*100,
+            mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/70)
+sim_summary_70_a
+```
+
+#### 80 Days
+```{r}
+#Collect parameters
+parms_80 <- parms
+parms_80$omega <- 1/80
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_80_a <- list()
+sim_list_80_a <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_a <-     sum(sample(camps.data$camp_total, 3))    # Sample different patch sizes for each sim
+  
+  x0_a <- c(N_a - initial_infected, initial_infected, 0, 0, N_a)
+
+  names(x0_a) <- c("S","E","I", "R", "N")
+
+
+  out_100_80_a <- ssa(
+    x0 = x0_a,
+    a = a,
+    nu = nu,
+    parms = parms_80,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_80_a <- out_100_80_a$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_80_a[[i]] <- sim_data_80_a
+}
+
+sim_output_80_a <- bind_rows(sim_list_80_a)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_80_a <- sim_output_80_a %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_80_a
+
+# Make Summary Table of output
+sim_summary_80_a <- sim_output_80_a %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/80)
+sim_summary_80_a
+```
+
+#### 150 Days
+```{r}
+#Collect parameters
+parms_150 <- parms
+parms_150$omega <- 1/150
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_150_a <- list()
+sim_list_150_a <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_a <-     sum(sample(camps.data$camp_total, 3))    # Sample different patch sizes for each sim
+  
+  x0_a <- c(N_a - initial_infected, initial_infected, 0, 0, N_a)
+
+  names(x0_a) <- c("S","E","I", "R", "N")
+
+
+  out_100_150_a <- ssa(
+    x0 = x0_a,
+    a = a,
+    nu = nu,
+    parms = parms_150,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_150_a <- out_100_150_a$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_150_a[[i]] <- sim_data_150_a
+}
+
+sim_output_150_a <- bind_rows(sim_list_150_a)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_150_a <- sim_output_150_a %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_150_a
+
+# Make Summary Table of output
+sim_summary_150_a <- sim_output_150_a %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/150)
+sim_summary_150_a
+```
+
+#### 180 Days
+```{r}
+#Collect parameters
+parms_180 <- parms
+parms_180$omega <- 1/180
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_180_a <- list()
+sim_list_180_a <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_a <-     sum(sample(camps.data$camp_total, 3))    # Sample different patch sizes for each sim
+  
+  x0_a <- c(N_a - initial_infected, initial_infected, 0, 0, N_a)
+
+  names(x0_a) <- c("S","E","I", "R", "N")
+
+
+  out_100_180_a <- ssa(
+    x0 = x0_a,
+    a = a,
+    nu = nu,
+    parms = parms_180,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_180_a <- out_100_180_a$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_180_a[[i]] <- sim_data_180_a
+}
+
+sim_output_180_a <- bind_rows(sim_list_180_a)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_180_a <- sim_output_180_a %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_180_a
+
+# Make Summary Table of output
+sim_summary_180_a <- sim_output_180_a %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/180)
+sim_summary_180_a
+```
+
+
+#### 365 Days
+```{r}
+#Collect parameters
+parms_365 <- parms
+parms_365$omega <- 1/365
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_365_a <- list()
+sim_list_365_a <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_a <-     sum(sample(camps.data$camp_total, 3))    # Sample different patch sizes for each sim
+  
+  x0_a <- c(N_a - initial_infected, initial_infected, 0, 0, N_a)
+
+  names(x0_a) <- c("S","E","I", "R", "N")
+
+
+  out_100_365_a <- ssa(
+    x0 = x0_a,
+    a = a,
+    nu = nu,
+    parms = parms_365,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_365_a <- out_100_365_a$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_365_a[[i]] <- sim_data_365_a
+}
+
+sim_output_365_a <- bind_rows(sim_list_365_a)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_365_a <- sim_output_365_a %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_365_a
+
+# Make Summary Table of output
+sim_summary_365_a <- sim_output_365_a %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/365)
+sim_summary_365_a
+```
+
+
+
+#### Results
+```{r}
+waning_results_single_a <- sim_summary_a %>%
+  bind_rows(sim_summary_1_a) %>%
+  bind_rows(sim_summary_3_a) %>%
+  bind_rows(sim_summary_7_a) %>%
+  bind_rows(sim_summary_10_a) %>%
+  bind_rows(sim_summary_20_a) %>%
+  bind_rows(sim_summary_30_a) %>%
+  bind_rows(sim_summary_40_a) %>%
+  bind_rows(sim_summary_50_a) %>%
+  bind_rows(sim_summary_60_a) %>%
+  bind_rows(sim_summary_70_a) %>%
+  bind_rows(sim_summary_80_a) %>%
+  bind_rows(sim_summary_150_a) %>%
+  bind_rows(sim_summary_180_a) %>%
+  bind_rows(sim_summary_365_a) %>%
+  mutate(immunity_duration = 1/omega) %>%
+  arrange(immunity_duration) %>%
+  mutate(model="single",
+         patches = 3)
+
+write_csv(waning_results_single_a, file = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models/Results/waning_results_single_a.csv")
+
+waning_results_single_a
+
+```
+
+```{r}
+ggplot(waning_results_single_a, aes(immunity_duration, sum_persist)) +
+  geom_line()+
+  geom_point()+
+  theme_bw()
+```
+
+## 7-Patch Single Population
+
+The same single population model was run with $N$ defined as the sum of 7 randomly selected camp sizes.
+
+### Model Set-up
+
+Model was set up with a single randomly selected camp size with a single infected individual and parameters for pathogen X. 
+
+```{r}
+# Define Paramenters
+N_b <-    sum(sample(camps.data$camp_total, 7))    # Total Population size of three camps
+initial_infected <-  1    # Initial infected
+simName <- "SEIRS model"       # Simulation name
+tf <- 365*3
+
+#Collect parameters
+parms <- list(
+  beta = 0.6,
+  sigma = 0.175,                          # E to I rate
+  gamma = 0.2,                           # I to R rate
+  omega = 1/100,                         # R to S rate
+  mu = demo_sum$Birth_rate_daily_Mean,                            # Birth/death rate per person per day
+  alpha = 1/1000) 
+
+#Create the named initial state vector for the U-patch system.
+
+x0_b <- c(N_b - initial_infected, initial_infected, 0, 0, N_b)
+
+names(x0_b) <- c("S","E","I", "R", "N")
+
+
+# Define the state change matrix for a single patch
+nu <- matrix(c( -1,  0,  0, +1, +1, -1,  0,  0,  0,  0, # S
+                +1, -1,  0,  0,  0,  0, -1,  0,  0,  0, # E
+                0, +1, -1,  0,  0,  0,  0, -1,  0, -1, # I
+                0,  0, +1, -1,  0,  0,  0,  0, -1,  0, # R 
+                0,  0,  0,  0, +1, -1 ,-1, -1, -1, -1), # N
+             nrow=5,byrow=TRUE)
+
+# Define propensity functions
+a <-c(
+        paste0("(beta*I/N)*S"), # Infection
+        paste0("sigma*E"),                                       # Becomes infecious
+        paste0("gamma*I"),                                       # Recovery from infection
+        paste0("omega*R"),       # Loss of immunity
+        paste0("mu*N"),                             # Births
+        paste0("mu*S"),                                             # Deaths (S)
+        paste0("mu*E"),                                             # Deaths (E)
+        paste0("mu*I"),                                             # Deaths (I)
+        paste0("mu*R"),                                             # Deaths (R)
+        paste0("alpha*I")                                           # Deaths from infection
+        
+      )
+
+```
+
+
+### Run Single Population Model
+```{r}
+
+EIE_single <- EIE(R0_single, parms) # proportion of expected infecteds at equilibrium
+EIE_single
+
+expexted_infecteds <- EIE_single*N_b # number of expected infecteds at equilibrium
+expexted_infecteds
+
+sqrt(N_b) # magnitude of oscillations 
+```
+
+```{r}
+# Run simulations with the Direct method
+set.seed(21)
+out_b <- ssa(
+  x0 = x0_b,
+  a = a,
+  nu = nu,
+  parms = parms,
+  tf = tf,
+  method = ssa.d(),
+  simName = simName,
+  verbose = FALSE,
+  consoleInterval = 1
+) 
+
+
+
+## Extra Plots
+plot_data_b <- out_b$data %>%
+  as_tibble() %>%
+  pivot_longer(!t, names_to = "state", values_to = "count") %>%
+  mutate(state = factor(state, levels = c("S", "E", "I", "R", "N"))) #%>%
+  #filter(state != "N")
+
+single_plot_b <- ggplot(data = plot_data_b, aes(x=t, y=count, colour=state))+
+  geom_line(alpha=0.8)+
+  labs(x="Time (Days)",
+       y="Number of Individuals", 
+       colour="State")+
+  geom_hline(yintercept = expexted_infecteds, linetype = 'dashed') +
+  theme_bw()
+
+single_plot_b
+```
+
+```{r}
+plot_data_b %>%
+  filter(state == "I") %>%
+  slice_max(count)
+```
+Outbreak peaked at day 32 with 31 infected individuals.
+
+```{r}
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_b <- list()
+sim_list_b <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  
+  N_b <-     sum(sample(camps.data$camp_total, 7))    # Sample different patch sizes for each sim
+  
+  x0_b <- c(N_b - initial_infected, initial_infected, 0, 0, N_b)
+
+  names(x0_b) <- c("S","E","I", "R", "N")
+
+
+  set.seed(i)
+  out_100_b <- ssa(
+    x0 = x0_b,
+    a = a,
+    nu = nu,
+    parms = parms,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_b <- out_100_b$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_b[[i]] <- sim_data_b
+}
+
+sim_output_b <- bind_rows(sim_list_b)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_b <- sim_output_b %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+head(sim_output_b)
+
+# Make Summary Table of output
+sim_summary_b <- sim_output_b %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100, 
+            mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/100)
+sim_summary_b
+```
+
+### Varying waining immunity {.tabset .tabset-fade .tabset-pills}
+Waning immunity was thought to play an important role in the persistence of pathogen X so we incrementally increased the duration of immunity (by decreasing $\omega$) and calculated the probability of persistence after 3 years in 1000 stochastic simulations. Duration of immunity was increased from 1 day to a year.
+
+#### 0 Days
+```{r}
+#Collect parameters
+parms_0 <- parms
+parms_0$omega <- 0
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_0_b <- list()
+sim_list_0_b <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_b <-     sum(sample(camps.data$camp_total, 7))    # Sample different patch sizes for each sim
+  
+  x0_b <- c(N_b - initial_infected, initial_infected, 0, 0, N_b)
+
+  names(x0_b) <- c("S","E","I", "R", "N")
+
+
+  out_100_0_b <- ssa(
+    x0 = x0_b,
+    a = a,
+    nu = nu,
+    parms = parms_0,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_0_b <- out_100_0_b$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_0_b[[i]] <- sim_data_0_b
+}
+
+sim_output_0_b <- bind_rows(sim_list_0_b)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_0_b <- sim_output_0_b %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_0_b
+
+# Make Summary Table of output
+sim_summary_0_b <- sim_output_0_b %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 0)
+sim_summary_0_b
+```
+
+
+
+
+#### 1 Days
+```{r}
+#Collect parameters
+parms_1 <- parms
+parms_1$omega <- 1
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_1_b <- list()
+sim_list_1_b <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_b <-     sum(sample(camps.data$camp_total, 7))    # Sample different patch sizes for each sim
+  
+  x0_b <- c(N_b - initial_infected, initial_infected, 0, 0, N_b)
+
+  names(x0_b) <- c("S","E","I", "R", "N")
+
+
+  out_100_1_b <- ssa(
+    x0 = x0_b,
+    a = a,
+    nu = nu,
+    parms = parms_1,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_1_b <- out_100_1_b$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_1_b[[i]] <- sim_data_1_b
+}
+
+sim_output_1_b <- bind_rows(sim_list_1_b)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_1_b <- sim_output_1_b %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_1_b
+
+# Make Summary Table of output
+sim_summary_1_b <- sim_output_1_b %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1)
+sim_summary_1_b
+```
+
+
+
+
+
+#### 3 Days
+```{r}
+#Collect parameters
+parms_3 <- parms
+parms_3$omega <- 1/3
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_3_b <- list()
+sim_list_3_b <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_b <-     sum(sample(camps.data$camp_total, 7))    # Sample different patch sizes for each sim
+  
+  x0_b <- c(N_b - initial_infected, initial_infected, 0, 0, N_b)
+
+  names(x0_b) <- c("S","E","I", "R", "N")
+
+
+  out_100_3_b <- ssa(
+    x0 = x0_b,
+    a = a,
+    nu = nu,
+    parms = parms_3,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_3_b <- out_100_3_b$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_3_b[[i]] <- sim_data_3_b
+}
+
+sim_output_3_b <- bind_rows(sim_list_3_b)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_3_b <- sim_output_3_b %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_3_b
+
+# Make Summary Table of output
+sim_summary_3_b <- sim_output_3_b %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/3)
+sim_summary_3_b
+```
+
+#### 7 Days
+```{r}
+#Collect parameters
+parms_7 <- parms
+parms_7$omega <- 1/7
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_7_b <- list()
+sim_list_7_b <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_b <-     sum(sample(camps.data$camp_total, 7))   # Sample different patch sizes for each sim
+  
+  x0_b <- c(N_b - initial_infected, initial_infected, 0, 0, N_b)
+
+  names(x0_b) <- c("S","E","I", "R", "N")
+
+
+  out_100_7_b <- ssa(
+    x0 = x0_b,
+    a = a,
+    nu = nu,
+    parms = parms_7,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_7_b <- out_100_7_b$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_7_b[[i]] <- sim_data_7_b
+}
+
+sim_output_7_b <- bind_rows(sim_list_7_b)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_7_b <- sim_output_7_b %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_7_b
+
+# Make Summary Table of output
+sim_summary_7_b <- sim_output_7_b %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/7)
+sim_summary_7_b
+```
+
+#### 10 Days
+```{r}
+#Collect parameters
+parms_10 <- parms
+parms_10$omega <- 1/10
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_10_b <- list()
+sim_list_10_b <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_b <-     sum(sample(camps.data$camp_total, 7))    # Sample different patch sizes for each sim
+  
+  x0_b <- c(N_b - initial_infected, initial_infected, 0, 0, N_b)
+
+  names(x0_b) <- c("S","E","I", "R", "N")
+
+
+  out_100_10_b <- ssa(
+    x0 = x0_b,
+    a = a,
+    nu = nu,
+    parms = parms_10,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_10_b <- out_100_10_b$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_10_b[[i]] <- sim_data_10_b
+}
+
+sim_output_10_b <- bind_rows(sim_list_10_b)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_10_b <- sim_output_10_b %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_10_b
+
+# Make Summary Table of output
+sim_summary_10_b <- sim_output_10_b %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/10)
+sim_summary_10_b
+```
+
+#### 20 Days
+```{r}
+#Collect parameters
+parms_20 <- parms
+parms_20$omega <- 1/20
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_20_b <- list()
+sim_list_20_b <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_b <-     sum(sample(camps.data$camp_total, 7))    # Sample different patch sizes for each sim
+  
+  x0_b <- c(N_b - initial_infected, initial_infected, 0, 0, N_b)
+
+  names(x0_b) <- c("S","E","I", "R", "N")
+
+
+  out_100_20_b <- ssa(
+    x0 = x0_b,
+    a = a,
+    nu = nu,
+    parms = parms_20,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_20_b <- out_100_20_b$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_20_b[[i]] <- sim_data_20_b
+}
+
+sim_output_20_b <- bind_rows(sim_list_20_b)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_20_b <- sim_output_20_b %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_20_b
+
+# Make Summary Table of output
+sim_summary_20_b <- sim_output_20_b %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/20)
+sim_summary_20_b
+```
+
+#### 30 Days
+```{r}
+#Collect parameters
+parms_30 <- parms
+parms_30$omega <- 1/30
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_30_b <- list()
+sim_list_30_b <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_b <-     sum(sample(camps.data$camp_total, 7))    # Sample different patch sizes for each sim
+  
+  x0_b <- c(N_b - initial_infected, initial_infected, 0, 0, N_b)
+
+  names(x0_b) <- c("S","E","I", "R", "N")
+
+
+  out_100_30_b <- ssa(
+    x0 = x0_b,
+    a = a,
+    nu = nu,
+    parms = parms_30,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_30_b <- out_100_30_b$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_30_b[[i]] <- sim_data_30_b
+}
+
+sim_output_30_b <- bind_rows(sim_list_30_b)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_30_b <- sim_output_30_b %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_30_b
+
+# Make Summary Table of output
+sim_summary_30_b <- sim_output_30_b %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/30)
+sim_summary_30_b
+```
+
+#### 40 Days
+```{r}
+#Collect parameters
+parms_40 <- parms
+parms_40$omega <- 1/40
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_40_b <- list()
+sim_list_40_b <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_b <-     sum(sample(camps.data$camp_total, 7))    # Sample different patch sizes for each sim
+  
+  x0_b <- c(N_b - initial_infected, initial_infected, 0, 0, N_b)
+
+  names(x0_b) <- c("S","E","I", "R", "N")
+
+
+  out_100_40_b <- ssa(
+    x0 = x0_b,
+    a = a,
+    nu = nu,
+    parms = parms_40,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_40_b <- out_100_40_b$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_40_b[[i]] <- sim_data_40_b
+}
+
+sim_output_40_b <- bind_rows(sim_list_40_b)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_40_b <- sim_output_40_b %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_40_b
+
+# Make Summary Table of output
+sim_summary_40_b <- sim_output_40_b %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/40)
+sim_summary_40_b
+```
+
+#### 50 Days
+```{r}
+#Collect parameters
+parms_50 <- parms
+parms_50$omega <- 1/50
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_50_b <- list()
+sim_list_50_b <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_b <-     sum(sample(camps.data$camp_total, 7))    # Sample different patch sizes for each sim
+  
+  x0_b <- c(N_b - initial_infected, initial_infected, 0, 0, N_b)
+
+  names(x0_b) <- c("S","E","I", "R", "N")
+
+
+  out_100_50_b <- ssa(
+    x0 = x0_b,
+    a = a,
+    nu = nu,
+    parms = parms_50,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_50_b <- out_100_50_b$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_50_b[[i]] <- sim_data_50_b
+}
+
+sim_output_50_b <- bind_rows(sim_list_50_b)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_50_b <- sim_output_50_b %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_50_b
+
+# Make Summary Table of output
+sim_summary_50_b <- sim_output_50_b %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/50)
+sim_summary_50_b
+```
+
+#### 60 Days
+```{r}
+#Collect parameters
+parms_60 <- parms
+parms_60$omega <- 1/60
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_60_b <- list()
+sim_list_60_b <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_b <-     sum(sample(camps.data$camp_total, 7))    # Sample different patch sizes for each sim
+  
+  x0_b <- c(N_b - initial_infected, initial_infected, 0, 0, N_b)
+
+  names(x0_b) <- c("S","E","I", "R", "N")
+
+
+  out_100_60_b <- ssa(
+    x0 = x0_b,
+    a = a,
+    nu = nu,
+    parms = parms_60,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_60_b <- out_100_60_b$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_60_b[[i]] <- sim_data_60_b
+}
+
+sim_output_60_b <- bind_rows(sim_list_60_b)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_60_b <- sim_output_60_b %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_60_b
+
+# Make Summary Table of output
+sim_summary_60_b <- sim_output_60_b %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/60)
+sim_summary_60_b
+```
+
+#### 70 Days
+```{r}
+#Collect parameters
+parms_70 <- parms
+parms_70$omega <- 1/70
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_70_b <- list()
+sim_list_70_b <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_b <-     sum(sample(camps.data$camp_total, 7))    # Sample different patch sizes for each sim
+  
+  x0_b <- c(N_b - initial_infected, initial_infected, 0, 0, N_b)
+
+  names(x0_b) <- c("S","E","I", "R", "N")
+
+
+  out_100_70_b <- ssa(
+    x0 = x0_b,
+    a = a,
+    nu = nu,
+    parms = parms_70,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_70_b <- out_100_70_b$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_70_b[[i]] <- sim_data_70_b
+}
+
+sim_output_70_b <- bind_rows(sim_list_70_b)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_70_b <- sim_output_70_b %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_70_b
+
+# Make Summary Table of output
+sim_summary_70_b <- sim_output_70_b %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist)/num_sims)*100,
+            mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/70)
+sim_summary_70_b
+```
+
+#### 80 Days
+```{r}
+#Collect parameters
+parms_80 <- parms
+parms_80$omega <- 1/80
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_80_b <- list()
+sim_list_80_b <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_b <-     sum(sample(camps.data$camp_total, 7))    # Sample different patch sizes for each sim
+  
+  x0_b <- c(N_b - initial_infected, initial_infected, 0, 0, N_b)
+
+  names(x0_b) <- c("S","E","I", "R", "N")
+
+
+  out_100_80_b <- ssa(
+    x0 = x0_b,
+    a = a,
+    nu = nu,
+    parms = parms_80,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_80_b <- out_100_80_b$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_80_b[[i]] <- sim_data_80_b
+}
+
+sim_output_80_b <- bind_rows(sim_list_80_b)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_80_b <- sim_output_80_b %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_80_b
+
+# Make Summary Table of output
+sim_summary_80_b <- sim_output_80_b %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/80)
+sim_summary_80_b
+```
+
+#### 90 Days
+```{r}
+#Collect parameters
+parms_90 <- parms
+parms_90$omega <- 1/90
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_90_b <- list()
+sim_list_90_b <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_b <-     sum(sample(camps.data$camp_total, 7))    # Sample different patch sizes for each sim
+  
+  x0_b <- c(N_b - initial_infected, initial_infected, 0, 0, N_b)
+
+  names(x0_b) <- c("S","E","I", "R", "N")
+
+
+  out_100_90_b <- ssa(
+    x0 = x0_b,
+    a = a,
+    nu = nu,
+    parms = parms_90,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_90_b <- out_100_90_b$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_90_b[[i]] <- sim_data_90_b
+}
+
+sim_output_90_b <- bind_rows(sim_list_90_b)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_90_b <- sim_output_90_b %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_90_b
+
+# Make Summary Table of output
+sim_summary_90_b <- sim_output_90_b %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/90)
+sim_summary_90_b
+```
+
+
+#### 110 Days
+```{r}
+#Collect parameters
+parms_110 <- parms
+parms_110$omega <- 1/110
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_110_b <- list()
+sim_list_110_b <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_b <-     sum(sample(camps.data$camp_total, 7))    # Sample different patch sizes for each sim
+  
+  x0_b <- c(N_b - initial_infected, initial_infected, 0, 0, N_b)
+
+  names(x0_b) <- c("S","E","I", "R", "N")
+
+
+  out_100_110_b <- ssa(
+    x0 = x0_b,
+    a = a,
+    nu = nu,
+    parms = parms_110,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_110_b <- out_100_110_b$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_110_b[[i]] <- sim_data_110_b
+}
+
+sim_output_110_b <- bind_rows(sim_list_110_b)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_110_b <- sim_output_110_b %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_110_b
+
+# Make Summary Table of output
+sim_summary_110_b <- sim_output_110_b %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/110)
+sim_summary_110_b
+```
+
+#### 120 Days
+```{r}
+#Collect parameters
+parms_120 <- parms
+parms_120$omega <- 1/120
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_120_b <- list()
+sim_list_120_b <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_b <-     sum(sample(camps.data$camp_total, 7))    # Sample different patch sizes for each sim
+  
+  x0_b <- c(N_b - initial_infected, initial_infected, 0, 0, N_b)
+
+  names(x0_b) <- c("S","E","I", "R", "N")
+
+
+  out_100_120_b <- ssa(
+    x0 = x0_b,
+    a = a,
+    nu = nu,
+    parms = parms_120,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_120_b <- out_100_120_b$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_120_b[[i]] <- sim_data_120_b
+}
+
+sim_output_120_b <- bind_rows(sim_list_120_b)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_120_b <- sim_output_120_b %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_120_b
+
+# Make Summary Table of output
+sim_summary_120_b <- sim_output_120_b %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/120)
+sim_summary_120_b
+```
+
+#### 130 Days
+```{r}
+#Collect parameters
+parms_130 <- parms
+parms_130$omega <- 1/130
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_130_b <- list()
+sim_list_130_b <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_b <-     sum(sample(camps.data$camp_total, 7))    # Sample different patch sizes for each sim
+  
+  x0_b <- c(N_b - initial_infected, initial_infected, 0, 0, N_b)
+
+  names(x0_b) <- c("S","E","I", "R", "N")
+
+
+  out_100_130_b <- ssa(
+    x0 = x0_b,
+    a = a,
+    nu = nu,
+    parms = parms_130,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_130_b <- out_100_130_b$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_130_b[[i]] <- sim_data_130_b
+}
+
+sim_output_130_b <- bind_rows(sim_list_130_b)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_130_b <- sim_output_130_b %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_130_b
+
+# Make Summary Table of output
+sim_summary_130_b <- sim_output_130_b %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/130)
+sim_summary_130_b
+```
+
+#### 150 Days
+```{r}
+#Collect parameters
+parms_150 <- parms
+parms_150$omega <- 1/150
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_150_b <- list()
+sim_list_150_b <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_b <-     sum(sample(camps.data$camp_total, 7))    # Sample different patch sizes for each sim
+  
+  x0_b <- c(N_b - initial_infected, initial_infected, 0, 0, N_b)
+
+  names(x0_b) <- c("S","E","I", "R", "N")
+
+
+  out_100_150_b <- ssa(
+    x0 = x0_b,
+    a = a,
+    nu = nu,
+    parms = parms_150,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_150_b <- out_100_150_b$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_150_b[[i]] <- sim_data_150_b
+}
+
+sim_output_150_b <- bind_rows(sim_list_150_b)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_150_b <- sim_output_150_b %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_150_b
+
+# Make Summary Table of output
+sim_summary_150_b <- sim_output_150_b %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/150)
+sim_summary_150_b
+```
+
+#### 180 Days
+```{r}
+#Collect parameters
+parms_180 <- parms
+parms_180$omega <- 1/180
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_180_b <- list()
+sim_list_180_b <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_b <-     sum(sample(camps.data$camp_total, 7))    # Sample different patch sizes for each sim
+  
+  x0_b <- c(N_b - initial_infected, initial_infected, 0, 0, N_b)
+
+  names(x0_b) <- c("S","E","I", "R", "N")
+
+
+  out_100_180_b <- ssa(
+    x0 = x0_b,
+    a = a,
+    nu = nu,
+    parms = parms_180,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_180_b <- out_100_180_b$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_180_b[[i]] <- sim_data_180_b
+}
+
+sim_output_180_b <- bind_rows(sim_list_180_b)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_180_b <- sim_output_180_b %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_180_b
+
+# Make Summary Table of output
+sim_summary_180_b <- sim_output_180_b %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/180)
+sim_summary_180_b
+```
+
+
+#### 365 Days
+```{r}
+#Collect parameters
+parms_365 <- parms
+parms_365$omega <- 1/365
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_365_b <- list()
+sim_list_365_b <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_b <-     sum(sample(camps.data$camp_total, 7))    # Sample different patch sizes for each sim
+  
+  x0_b <- c(N_b - initial_infected, initial_infected, 0, 0, N_b)
+
+  names(x0_b) <- c("S","E","I", "R", "N")
+
+
+  out_100_365_b <- ssa(
+    x0 = x0_b,
+    a = a,
+    nu = nu,
+    parms = parms_365,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_365_b <- out_100_365_b$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_365_b[[i]] <- sim_data_365_b
+}
+
+sim_output_365_b <- bind_rows(sim_list_365_b)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_365_b <- sim_output_365_b %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_365_b
+
+# Make Summary Table of output
+sim_summary_365_b <- sim_output_365_b %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/365)
+sim_summary_365_b
+```
+
+
+
+#### Results
+```{r}
+waning_results_single_b <- sim_summary_b %>%
+  bind_rows(sim_summary_1_b) %>%
+  bind_rows(sim_summary_3_b) %>%
+  bind_rows(sim_summary_7_b) %>%
+  bind_rows(sim_summary_10_b) %>%
+  bind_rows(sim_summary_20_b) %>%
+  bind_rows(sim_summary_30_b) %>%
+  bind_rows(sim_summary_40_b) %>%
+  bind_rows(sim_summary_50_b) %>%
+  bind_rows(sim_summary_60_b) %>%
+  bind_rows(sim_summary_70_b) %>%
+  bind_rows(sim_summary_80_b) %>%
+  bind_rows(sim_summary_90_b) %>%
+  bind_rows(sim_summary_110_b) %>%
+  bind_rows(sim_summary_120_b) %>%
+  bind_rows(sim_summary_130_b) %>%
+  bind_rows(sim_summary_150_b) %>%
+  bind_rows(sim_summary_180_b) %>%
+  bind_rows(sim_summary_365_b) %>%
+  mutate(immunity_duration = 1/omega) %>%
+  arrange(immunity_duration) %>%
+  mutate(model="single",
+         patches = 7)
+
+write_csv(waning_results_single_b, file = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models/Results/waning_results_single_b.csv")
+
+waning_results_single_b
+
+```
+
+```{r}
+ggplot(waning_results_single_b, aes(immunity_duration, sum_persist)) +
+  geom_line()+
+  geom_point()+
+  theme_bw()
+```
+
+## 14-Patch Single Population
+
+The same single population model was ran with $N$ defined as the sum of 14 randomly sampled camp sizes.
+
+### Model Set-up
+
+Model was set up with a single randomly selected camp size with a single infected individual and parameters for pathogen X. 
+
+```{r}
+# Define Paramenters
+N_c <-    sum(sample(camps.data$camp_total, 14))    # Total Population size of three camps
+initial_infected <-  1    # Initial infected
+simName <- "SEIRS model"       # Simulation name
+tf <- 365*3
+
+#Collect parameters
+parms <- list(
+  beta = 0.6,
+  sigma = 0.175,                          # E to I rate
+  gamma = 0.2,                           # I to R rate
+  omega = 1/100,                         # R to S rate
+  mu = demo_sum$Birth_rate_daily_Mean,                            # Birth/death rate per person per day
+  alpha = 1/1000) 
+
+#Create the named initial state vector for the U-patch system.
+
+x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+names(x0_c) <- c("S","E","I", "R", "N")
+
+
+# Define the state change matrix for a single patch
+nu <- matrix(c( -1,  0,  0, +1, +1, -1,  0,  0,  0,  0, # S
+                +1, -1,  0,  0,  0,  0, -1,  0,  0,  0, # E
+                0, +1, -1,  0,  0,  0,  0, -1,  0, -1, # I
+                0,  0, +1, -1,  0,  0,  0,  0, -1,  0, # R 
+                0,  0,  0,  0, +1, -1 ,-1, -1, -1, -1), # N
+             nrow=5,byrow=TRUE)
+
+# Define propensity functions
+a <-c(
+        paste0("(beta*I/N)*S"), # Infection
+        paste0("sigma*E"),                                       # Becomes infecious
+        paste0("gamma*I"),                                       # Recovery from infection
+        paste0("omega*R"),       # Loss of immunity
+        paste0("mu*N"),                             # Births
+        paste0("mu*S"),                                             # Deaths (S)
+        paste0("mu*E"),                                             # Deaths (E)
+        paste0("mu*I"),                                             # Deaths (I)
+        paste0("mu*R"),                                             # Deaths (R)
+        paste0("alpha*I")                                           # Deaths from infection
+        
+      )
+
+```
+
+
+### Run Single Population Model
+```{r}
+
+EIE_single <- EIE(R0_single, parms) # proportion of expected infecteds at equilibrium
+EIE_single
+
+expexted_infecteds <- EIE_single*N_c # number of expected infecteds at equilibrium
+expexted_infecteds
+
+sqrt(N_c) # magnitude of oscillations 
+```
+
+```{r}
+# Run simulations with the Direct method
+set.seed(25)
+out_c <- ssa(
+  x0 = x0_c,
+  a = a,
+  nu = nu,
+  parms = parms,
+  tf = tf,
+  method = ssa.d(),
+  simName = simName,
+  verbose = FALSE,
+  consoleInterval = 1
+) 
+
+
+
+## Extra Plots
+plot_data_c <- out_c$data %>%
+  as_tibble() %>%
+  pivot_longer(!t, names_to = "state", values_to = "count") %>%
+  mutate(state = factor(state, levels = c("S", "E", "I", "R", "N"))) #%>%
+  #filter(state != "N")
+
+single_plot_c <- ggplot(data = plot_data_c, aes(x=t, y=count, colour=state))+
+  geom_line(alpha=0.8)+
+  labs(x="Time (Days)",
+       y="Number of Individuals", 
+       colour="State")+
+  geom_hline(yintercept = expexted_infecteds, linetype = 'dashed') +
+  theme_bw()
+
+single_plot_c
+```
+
+```{r}
+plot_data_c %>%
+  filter(state == "I") %>%
+  slice_max(count)
+```
+Outbreak peaked at day 32 with 31 infected individuals.
+
+```{r}
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_c <- list()
+sim_list_c <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  
+  N_c <-     sum(sample(camps.data$camp_total, 14))    # Sample different patch sizes for each sim
+  
+  x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+  names(x0_c) <- c("S","E","I", "R", "N")
+
+
+  set.seed(i)
+  out_100_c <- ssa(
+    x0 = x0_c,
+    a = a,
+    nu = nu,
+    parms = parms,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_c <- out_100_c$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_c[[i]] <- sim_data_c
+}
+
+sim_output_c <- bind_rows(sim_list_c)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_c <- sim_output_c %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+head(sim_output_c)
+
+# Make Summary Table of output
+sim_summary_c <- sim_output_c %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100, 
+            mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/100)
+sim_summary_c
+```
+
+### Varying waining immunity {.tabset .tabset-fade .tabset-pills}
+Waning immunity was thought to play an important role in the persistence of pathogen X so we incrementally increased the duration of immunity (by decreasing $\omega$) and calculated the probability of persistence after 3 years in 1000 stochastic simulations. Duration of immunity was increased from 1 day to a year.
+
+#### 0 Days
+```{r}
+#Collect parameters
+parms_0 <- parms
+parms_0$omega <- 0
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_0_c <- list()
+sim_list_0_c <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_c <-     sum(sample(camps.data$camp_total, 14))    # Sample different patch sizes for each sim
+  
+  x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+  names(x0_c) <- c("S","E","I", "R", "N")
+
+
+  out_100_0_c <- ssa(
+    x0 = x0_c,
+    a = a,
+    nu = nu,
+    parms = parms_0,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_0_c <- out_100_0_c$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_0_c[[i]] <- sim_data_0_c
+}
+
+sim_output_0_c <- bind_rows(sim_list_0_c)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_0_c <- sim_output_0_c %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_0_c
+
+# Make Summary Table of output
+sim_summary_0_c <- sim_output_0_c %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 0)
+sim_summary_0_c
+```
+
+
+
+
+#### 1 Days
+```{r}
+#Collect parameters
+parms_1 <- parms
+parms_1$omega <- 1
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_1_c <- list()
+sim_list_1_c <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_c <-     sum(sample(camps.data$camp_total, 14))    # Sample different patch sizes for each sim
+  
+  x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+  names(x0_c) <- c("S","E","I", "R", "N")
+
+
+  out_100_1_c <- ssa(
+    x0 = x0_c,
+    a = a,
+    nu = nu,
+    parms = parms_1,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_1_c <- out_100_1_c$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_1_c[[i]] <- sim_data_1_c
+}
+
+sim_output_1_c <- bind_rows(sim_list_1_c)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_1_c <- sim_output_1_c %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_1_c
+
+# Make Summary Table of output
+sim_summary_1_c <- sim_output_1_c %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1)
+sim_summary_1_c
+```
+
+
+
+
+
+#### 3 Days
+```{r}
+#Collect parameters
+parms_3 <- parms
+parms_3$omega <- 1/3
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_3_c <- list()
+sim_list_3_c <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_c <-     sum(sample(camps.data$camp_total, 14))    # Sample different patch sizes for each sim
+  
+  x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+  names(x0_c) <- c("S","E","I", "R", "N")
+
+
+  out_100_3_c <- ssa(
+    x0 = x0_c,
+    a = a,
+    nu = nu,
+    parms = parms_3,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_3_c <- out_100_3_c$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_3_c[[i]] <- sim_data_3_c
+}
+
+sim_output_3_c <- bind_rows(sim_list_3_c)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_3_c <- sim_output_3_c %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_3_c
+
+# Make Summary Table of output
+sim_summary_3_c <- sim_output_3_c %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/3)
+sim_summary_3_c
+```
+
+#### 7 Days
+```{r}
+#Collect parameters
+parms_7 <- parms
+parms_7$omega <- 1/7
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_7_c <- list()
+sim_list_7_c <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_c <-     sum(sample(camps.data$camp_total, 14))   # Sample different patch sizes for each sim
+  
+  x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+  names(x0_c) <- c("S","E","I", "R", "N")
+
+
+  out_100_7_c <- ssa(
+    x0 = x0_c,
+    a = a,
+    nu = nu,
+    parms = parms_7,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_7_c <- out_100_7_c$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_7_c[[i]] <- sim_data_7_c
+}
+
+sim_output_7_c <- bind_rows(sim_list_7_c)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_7_c <- sim_output_7_c %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_7_c
+
+# Make Summary Table of output
+sim_summary_7_c <- sim_output_7_c %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/7)
+sim_summary_7_c
+```
+
+#### 10 Days
+```{r}
+#Collect parameters
+parms_10 <- parms
+parms_10$omega <- 1/10
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_10_c <- list()
+sim_list_10_c <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_c <-     sum(sample(camps.data$camp_total, 14))    # Sample different patch sizes for each sim
+  
+  x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+  names(x0_c) <- c("S","E","I", "R", "N")
+
+
+  out_100_10_c <- ssa(
+    x0 = x0_c,
+    a = a,
+    nu = nu,
+    parms = parms_10,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_10_c <- out_100_10_c$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_10_c[[i]] <- sim_data_10_c
+}
+
+sim_output_10_c <- bind_rows(sim_list_10_c)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_10_c <- sim_output_10_c %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_10_c
+
+# Make Summary Table of output
+sim_summary_10_c <- sim_output_10_c %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/10)
+sim_summary_10_c
+```
+
+#### 20 Days
+```{r}
+#Collect parameters
+parms_20 <- parms
+parms_20$omega <- 1/20
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_20_c <- list()
+sim_list_20_c <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_c <-     sum(sample(camps.data$camp_total, 14))    # Sample different patch sizes for each sim
+  
+  x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+  names(x0_c) <- c("S","E","I", "R", "N")
+
+
+  out_100_20_c <- ssa(
+    x0 = x0_c,
+    a = a,
+    nu = nu,
+    parms = parms_20,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_20_c <- out_100_20_c$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_20_c[[i]] <- sim_data_20_c
+}
+
+sim_output_20_c <- bind_rows(sim_list_20_c)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_20_c <- sim_output_20_c %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_20_c
+
+# Make Summary Table of output
+sim_summary_20_c <- sim_output_20_c %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/20)
+sim_summary_20_c
+```
+
+#### 30 Days
+```{r}
+#Collect parameters
+parms_30 <- parms
+parms_30$omega <- 1/30
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_30_c <- list()
+sim_list_30_c <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_c <-     sum(sample(camps.data$camp_total, 14))    # Sample different patch sizes for each sim
+  
+  x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+  names(x0_c) <- c("S","E","I", "R", "N")
+
+
+  out_100_30_c <- ssa(
+    x0 = x0_c,
+    a = a,
+    nu = nu,
+    parms = parms_30,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_30_c <- out_100_30_c$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_30_c[[i]] <- sim_data_30_c
+}
+
+sim_output_30_c <- bind_rows(sim_list_30_c)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_30_c <- sim_output_30_c %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_30_c
+
+# Make Summary Table of output
+sim_summary_30_c <- sim_output_30_c %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/30)
+sim_summary_30_c
+```
+
+#### 40 Days
+```{r}
+#Collect parameters
+parms_40 <- parms
+parms_40$omega <- 1/40
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_40_c <- list()
+sim_list_40_c <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_c <-     sum(sample(camps.data$camp_total, 14))    # Sample different patch sizes for each sim
+  
+  x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+  names(x0_c) <- c("S","E","I", "R", "N")
+
+
+  out_100_40_c <- ssa(
+    x0 = x0_c,
+    a = a,
+    nu = nu,
+    parms = parms_40,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_40_c <- out_100_40_c$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_40_c[[i]] <- sim_data_40_c
+}
+
+sim_output_40_c <- bind_rows(sim_list_40_c)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_40_c <- sim_output_40_c %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_40_c
+
+# Make Summary Table of output
+sim_summary_40_c <- sim_output_40_c %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/40)
+sim_summary_40_c
+```
+
+#### 50 Days
+```{r}
+#Collect parameters
+parms_50 <- parms
+parms_50$omega <- 1/50
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_50_c <- list()
+sim_list_50_c <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_c <-     sum(sample(camps.data$camp_total, 14))    # Sample different patch sizes for each sim
+  
+  x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+  names(x0_c) <- c("S","E","I", "R", "N")
+
+
+  out_100_50_c <- ssa(
+    x0 = x0_c,
+    a = a,
+    nu = nu,
+    parms = parms_50,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_50_c <- out_100_50_c$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_50_c[[i]] <- sim_data_50_c
+}
+
+sim_output_50_c <- bind_rows(sim_list_50_c)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_50_c <- sim_output_50_c %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_50_c
+
+# Make Summary Table of output
+sim_summary_50_c <- sim_output_50_c %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/50)
+sim_summary_50_c
+```
+
+#### 60 Days
+```{r}
+#Collect parameters
+parms_60 <- parms
+parms_60$omega <- 1/60
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_60_c <- list()
+sim_list_60_c <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_c <-     sum(sample(camps.data$camp_total, 14))    # Sample different patch sizes for each sim
+  
+  x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+  names(x0_c) <- c("S","E","I", "R", "N")
+
+
+  out_100_60_c <- ssa(
+    x0 = x0_c,
+    a = a,
+    nu = nu,
+    parms = parms_60,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_60_c <- out_100_60_c$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_60_c[[i]] <- sim_data_60_c
+}
+
+sim_output_60_c <- bind_rows(sim_list_60_c)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_60_c <- sim_output_60_c %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_60_c
+
+# Make Summary Table of output
+sim_summary_60_c <- sim_output_60_c %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/60)
+sim_summary_60_c
+```
+
+#### 70 Days
+```{r}
+#Collect parameters
+parms_70 <- parms
+parms_70$omega <- 1/70
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_70_c <- list()
+sim_list_70_c <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_c <-     sum(sample(camps.data$camp_total, 14))    # Sample different patch sizes for each sim
+  
+  x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+  names(x0_c) <- c("S","E","I", "R", "N")
+
+
+  out_100_70_c <- ssa(
+    x0 = x0_c,
+    a = a,
+    nu = nu,
+    parms = parms_70,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_70_c <- out_100_70_c$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_70_c[[i]] <- sim_data_70_c
+}
+
+sim_output_70_c <- bind_rows(sim_list_70_c)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_70_c <- sim_output_70_c %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_70_c
+
+# Make Summary Table of output
+sim_summary_70_c <- sim_output_70_c %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist)/num_sims)*100,
+            mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/70)
+sim_summary_70_c
+```
+
+#### 80 Days
+```{r}
+#Collect parameters
+parms_80 <- parms
+parms_80$omega <- 1/80
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_80_c <- list()
+sim_list_80_c <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_c <-     sum(sample(camps.data$camp_total, 14))    # Sample different patch sizes for each sim
+  
+  x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+  names(x0_c) <- c("S","E","I", "R", "N")
+
+
+  out_100_80_c <- ssa(
+    x0 = x0_c,
+    a = a,
+    nu = nu,
+    parms = parms_80,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_80_c <- out_100_80_c$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_80_c[[i]] <- sim_data_80_c
+}
+
+sim_output_80_c <- bind_rows(sim_list_80_c)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_80_c <- sim_output_80_c %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_80_c
+
+# Make Summary Table of output
+sim_summary_80_c <- sim_output_80_c %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/80)
+sim_summary_80_c
+```
+
+#### 90 Days
+```{r}
+#Collect parameters
+parms_90 <- parms
+parms_90$omega <- 1/90
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_90_c <- list()
+sim_list_90_c <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_c <-     sum(sample(camps.data$camp_total, 14))    # Sample different patch sizes for each sim
+  
+  x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+  names(x0_c) <- c("S","E","I", "R", "N")
+
+
+  out_100_90_c <- ssa(
+    x0 = x0_c,
+    a = a,
+    nu = nu,
+    parms = parms_90,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_90_c <- out_100_90_c$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_90_c[[i]] <- sim_data_90_c
+}
+
+sim_output_90_c <- bind_rows(sim_list_90_c)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_90_c <- sim_output_90_c %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_90_c
+
+# Make Summary Table of output
+sim_summary_90_c <- sim_output_90_c %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/90)
+sim_summary_90_c
+```
+
+
+#### 110 Days
+```{r}
+#Collect parameters
+parms_110 <- parms
+parms_110$omega <- 1/110
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_110_c <- list()
+sim_list_110_c <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_c <-     sum(sample(camps.data$camp_total, 14))    # Sample different patch sizes for each sim
+  
+  x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+  names(x0_c) <- c("S","E","I", "R", "N")
+
+
+  out_100_110_c <- ssa(
+    x0 = x0_c,
+    a = a,
+    nu = nu,
+    parms = parms_110,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_110_c <- out_100_110_c$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_110_c[[i]] <- sim_data_110_c
+}
+
+sim_output_110_c <- bind_rows(sim_list_110_c)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_110_c <- sim_output_110_c %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_110_c
+
+# Make Summary Table of output
+sim_summary_110_c <- sim_output_110_c %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/110)
+sim_summary_110_c
+```
+
+#### 120 Days
+```{r}
+#Collect parameters
+parms_120 <- parms
+parms_120$omega <- 1/120
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_120_c <- list()
+sim_list_120_c <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_c <-     sum(sample(camps.data$camp_total, 14))    # Sample different patch sizes for each sim
+  
+  x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+  names(x0_c) <- c("S","E","I", "R", "N")
+
+
+  out_100_120_c <- ssa(
+    x0 = x0_c,
+    a = a,
+    nu = nu,
+    parms = parms_120,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_120_c <- out_100_120_c$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_120_c[[i]] <- sim_data_120_c
+}
+
+sim_output_120_c <- bind_rows(sim_list_120_c)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_120_c <- sim_output_120_c %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_120_c
+
+# Make Summary Table of output
+sim_summary_120_c <- sim_output_120_c %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/120)
+sim_summary_120_c
+```
+
+#### 130 Days
+```{r}
+#Collect parameters
+parms_130 <- parms
+parms_130$omega <- 1/130
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_130_c <- list()
+sim_list_130_c <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_c <-     sum(sample(camps.data$camp_total, 14))    # Sample different patch sizes for each sim
+  
+  x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+  names(x0_c) <- c("S","E","I", "R", "N")
+
+
+  out_100_130_c <- ssa(
+    x0 = x0_c,
+    a = a,
+    nu = nu,
+    parms = parms_130,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_130_c <- out_100_130_c$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_130_c[[i]] <- sim_data_130_c
+}
+
+sim_output_130_c <- bind_rows(sim_list_130_c)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_130_c <- sim_output_130_c %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_130_c
+
+# Make Summary Table of output
+sim_summary_130_c <- sim_output_130_c %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/130)
+sim_summary_130_c
+```
+
+#### 150 Days
+```{r}
+#Collect parameters
+parms_150 <- parms
+parms_150$omega <- 1/150
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_150_c <- list()
+sim_list_150_c <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_c <-     sum(sample(camps.data$camp_total, 14))    # Sample different patch sizes for each sim
+  
+  x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+  names(x0_c) <- c("S","E","I", "R", "N")
+
+
+  out_100_150_c <- ssa(
+    x0 = x0_c,
+    a = a,
+    nu = nu,
+    parms = parms_150,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_150_c <- out_100_150_c$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_150_c[[i]] <- sim_data_150_c
+}
+
+sim_output_150_c <- bind_rows(sim_list_150_c)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_150_c <- sim_output_150_c %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_150_c
+
+# Make Summary Table of output
+sim_summary_150_c <- sim_output_150_c %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/150)
+sim_summary_150_c
+```
+
+#### 180 Days
+```{r}
+#Collect parameters
+parms_180 <- parms
+parms_180$omega <- 1/180
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_180_c <- list()
+sim_list_180_c <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_c <-     sum(sample(camps.data$camp_total, 14))    # Sample different patch sizes for each sim
+  
+  x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+  names(x0_c) <- c("S","E","I", "R", "N")
+
+
+  out_100_180_c <- ssa(
+    x0 = x0_c,
+    a = a,
+    nu = nu,
+    parms = parms_180,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_180_c <- out_100_180_c$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_180_c[[i]] <- sim_data_180_c
+}
+
+sim_output_180_c <- bind_rows(sim_list_180_c)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_180_c <- sim_output_180_c %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_180_c
+
+# Make Summary Table of output
+sim_summary_180_c <- sim_output_180_c %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/180)
+sim_summary_180_c
+```
+
+#### 220 Days
+```{r}
+#Collect parameters
+parms_220 <- parms
+parms_220$omega <- 1/220
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_220_c <- list()
+sim_list_220_c <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_c <-     sum(sample(camps.data$camp_total, 14))    # Sample different patch sizes for each sim
+  
+  x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+  names(x0_c) <- c("S","E","I", "R", "N")
+
+
+  out_100_220_c <- ssa(
+    x0 = x0_c,
+    a = a,
+    nu = nu,
+    parms = parms_220,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_220_c <- out_100_220_c$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_220_c[[i]] <- sim_data_220_c
+}
+
+sim_output_220_c <- bind_rows(sim_list_220_c)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_220_c <- sim_output_220_c %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_220_c
+
+# Make Summary Table of output
+sim_summary_220_c <- sim_output_220_c %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/220)
+sim_summary_220_c
+```
+
+#### 270 Days
+```{r}
+#Collect parameters
+parms_270 <- parms
+parms_270$omega <- 1/270
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_270_c <- list()
+sim_list_270_c <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_c <-     sum(sample(camps.data$camp_total, 14))    # Sample different patch sizes for each sim
+  
+  x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+  names(x0_c) <- c("S","E","I", "R", "N")
+
+
+  out_100_270_c <- ssa(
+    x0 = x0_c,
+    a = a,
+    nu = nu,
+    parms = parms_270,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_270_c <- out_100_270_c$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_270_c[[i]] <- sim_data_270_c
+}
+
+sim_output_270_c <- bind_rows(sim_list_270_c)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_270_c <- sim_output_270_c %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_270_c
+
+# Make Summary Table of output
+sim_summary_270_c <- sim_output_270_c %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/270)
+sim_summary_270_c
+```
+
+#### 365 Days
+```{r}
+#Collect parameters
+parms_365 <- parms
+parms_365$omega <- 1/365
+
+
+## Run multiple simulations and saving output
+num_sims <- 1000
+sim_list_365_c <- list()
+sim_list_365_c <- vector("list", length = num_sims)
+
+for (i in 1:num_sims){
+  set.seed(i)
+  
+  N_c <-     sum(sample(camps.data$camp_total, 14))    # Sample different patch sizes for each sim
+  
+  x0_c <- c(N_c - initial_infected, initial_infected, 0, 0, N_c)
+
+  names(x0_c) <- c("S","E","I", "R", "N")
+
+
+  out_100_365_c <- ssa(
+    x0 = x0_c,
+    a = a,
+    nu = nu,
+    parms = parms_365,
+    tf = tf,
+    method = ssa.d(),
+    simName = simName,
+    verbose = FALSE,
+    consoleInterval = 1
+  )
+
+  
+# Extract Final time point from output data
+  sim_data_365_c <- out_100_365_c$data %>%
+    as_tibble() %>%
+    slice_max(t) %>%
+    distinct() %>%
+    pivot_longer(!t, names_to = "state", values_to = "count") %>%
+    pivot_wider(names_from = state, values_from = count) %>%
+    mutate(persist = case_when(I > 0 ~ T, 
+                               I == 0 ~ F),
+           sim = i) %>%
+    select(sim, I, N, persist)
+  
+  sim_list_365_c[[i]] <- sim_data_365_c
+}
+
+sim_output_365_c <- bind_rows(sim_list_365_c)
+```
+
+```{r}
+# Summary table of endpoint data
+sim_output_365_c <- sim_output_365_c %>%
+  group_by(sim) %>%
+  summarise(total_I = sum(I), 
+            total_N = sum(N)) %>%
+  mutate(percent_persist = total_I/(total_N)*100,
+         persist = case_when(total_I > 0 ~ T, 
+                               total_I == 0 ~ F))
+sim_output_365_c
+
+# Make Summary Table of output
+sim_summary_365_c <- sim_output_365_c %>%
+  summarise(mean_infecteds = mean(total_I),
+            sum_persist = (sum(persist, na.rm = T)/num_sims)*100,              mean_percent_infected = mean(percent_persist)) %>%
+  mutate(omega = 1/365)
+sim_summary_365_c
+```
+
+
+
+#### Results
+```{r}
+waning_results_single_c <- sim_summary_c %>%
+  bind_rows(sim_summary_1_c) %>%
+  bind_rows(sim_summary_3_c) %>%
+  bind_rows(sim_summary_7_c) %>%
+  bind_rows(sim_summary_10_c) %>%
+  bind_rows(sim_summary_20_c) %>%
+  bind_rows(sim_summary_30_c) %>%
+  bind_rows(sim_summary_40_c) %>%
+  bind_rows(sim_summary_50_c) %>%
+  bind_rows(sim_summary_60_c) %>%
+  bind_rows(sim_summary_70_c) %>%
+  bind_rows(sim_summary_80_c) %>%
+  bind_rows(sim_summary_90_c) %>%
+  bind_rows(sim_summary_110_c) %>%
+  bind_rows(sim_summary_120_c) %>%
+  bind_rows(sim_summary_130_c) %>%
+  bind_rows(sim_summary_150_c) %>%
+  bind_rows(sim_summary_180_c) %>%
+  bind_rows(sim_summary_220_c) %>%
+  bind_rows(sim_summary_270_c) %>%
+  bind_rows(sim_summary_365_c) %>%
+  mutate(immunity_duration = 1/omega) %>%
+  arrange(immunity_duration) %>%
+  mutate(model="single",
+         patches = 14)
+
+write_csv(waning_results_single_c, file = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models/Results/waning_results_single_c.csv")
+
+waning_results_single_c
+
+```
+
+```{r}
+ggplot(waning_results_single_c, aes(immunity_duration, sum_persist)) +
+  geom_line()+
+  geom_point()+
+  theme_bw()
+```
+## Combined Meta and Single Results
+```{r}
+combined_waning_2 <- read_csv("Results/combined_waning_results.csv")%>%
+  bind_rows(waning_results_single_a) %>%
+  bind_rows(waning_results_single_b) %>%
+  bind_rows(waning_results_single_c)
+
+combined_waning_2
+
+write_csv(combined_waning_2, "Results/combined_waning_results_2.csv")
+```
+
+```{r}
+
+combined_plot_2 <- ggplot(combined_waning_2, aes(immunity_duration, sum_persist, colour = as.factor(patches), linetype = model))+
+  geom_line(alpha=0.9, size=1)+
+  #geom_point(alpha=0.5, size=1.5)+
+  scale_y_continuous(breaks = seq(0, 100, 10)) +
+  scale_x_continuous(breaks = seq(0, 360, 50)) +
+  labs(x = "Duration of immunity (days)",
+       y = "Probability of persistence after 3 years (%)", 
+       colour = "No. Camps",
+       linetype = "Model Type")+
+  scale_color_discrete(type = pal,
+                         #wes_palettes$AsteroidCity3,
+                       labels = c("1", "3", "7", "14"))+
+  scale_linetype_discrete(labels = c("Metapopulation", "Single Population")) +
+  theme_bw()
+
+combined_plot_2
+```
+```{r}
+ggsave(filename = "combined_plot_patches_2.pdf", plot = combined_plot_2, device = "pdf", width = 7, height = 5, path = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models/Plots")
+```
+
+```{r}
+pathogenX_results <- combined_waning_2 %>%
+  filter(omega == 0.01)
+
+pathogenX_results
+```
+
+
+```{r}
+pathogenX_bar <- ggplot(pathogenX_results, aes(as.factor(patches), sum_persist, groupName = model, fill = model)) +
+  geom_col(position=position_dodge(), colour = "black") +
+  scale_y_continuous(breaks = seq(0, 100, 10)) +
+  labs(x = "No. Camps",
+       y = "Probability of persistence after 3 years (%)",
+       fill = "Model Type") +
+  scale_fill_discrete(
+    type = wes_palettes$AsteroidCity3,
+    labels = c("Metapopulation", "Single Population")) +
+  theme_bw()
+
+pathogenX_bar
+```
+```{r}
+ggsave(filename = "pathogenX_bar.pdf", plot = pathogenX_bar, device = "pdf", width = 7, height = 4, path = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models/Plots")
+
+```
+
+## Combined plots
+```{r}
+library(ggpubr)
+library(grid)
+theme_set(theme_pubr())
+
+double_combined_plot <- ggarrange(combined_plot + rremove("xlab") + rremove("ylab"), combined_plot_2 + rremove("xlab") + rremove("ylab"),
+          labels = c("A", "B"),
+          font.label = list(size = 12, face = "plain"),
+          vjust = 1,
+          ncol = 2, nrow = 1,
+          legend.grob = get_legend(combined_plot_2),
+          legend = "right"
+          )
+
+double_combined_plot <- annotate_figure(double_combined_plot, left = textGrob("Probability of persistence after 3 years (%)", rot = 90, vjust = 1, gp = gpar(cex = 1)),
+                    bottom = textGrob("Duration of immunity (days)", hjust = 0.8, gp = gpar(cex = 1)))
+
+double_combined_plot
+```
+```{r}
+ggsave(filename = "double_immunity_plot.pdf", plot = double_combined_plot, device = "pdf", width = 8, height = 4, path = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models/Plots")
 ```
 
 
