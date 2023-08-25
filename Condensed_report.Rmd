@@ -240,6 +240,7 @@ CCS <- function(infectious_period, R0) {
 ```
 
 ### Calculate Epidemic Statistics
+<<<<<<< HEAD
 The expected number of secondary cases from a single infected individual in an entirely susceptible population, also known as the basic reproduction number ($R_0$), was calculated for pathogen X in both the single and meta population model. In the single population SEIRS model, $R_0$ may be estimated~(Bjørnstad, 2023):
 
 \begin{equation}       
@@ -260,6 +261,8 @@ The expected proportion of infected individuals at endemic equilibrium, $I^*$, w
     I^* = \frac{(R_0 - 1)\omega}{\gamma R_0}
 \end{equation}
 
+=======
+>>>>>>> 672728028f18b2fc224322993d245c9a6ee71bf1
 ```{r}
 
 # Calculate R0, expected number of infecteds at equilibrium, magnitude of oscillation and CCS
@@ -278,12 +281,18 @@ CCS_single <- CCS(infectious_period = 5, R0 = R0_single) # Average life expectan
 CCS_single
 ```
 ### Plot CCS by infectious period and R0
+<<<<<<< HEAD
 
 Parameter space of CCS equation was explored with infectious period ranging from 5 to 365 days and $R_0$ ranging from 1.1 to 5. 
 
 ```{r}
 infectious_periods <- seq(5, 365, 10)
 
+=======
+```{r}
+infectious_periods <- seq(5, 365, 10)
+
+>>>>>>> 672728028f18b2fc224322993d245c9a6ee71bf1
 R0_seq <- seq(1.1,5,0.2)
 
 x = infectious_periods
@@ -10010,15 +10019,22 @@ ggplot(combined_waning, aes(immunity_duration, mean_percent_infected, colour = a
 
 ## 3-Patch Single Population
 
+<<<<<<< HEAD
 3 more single population models were ran to understand if the increased probability of persistence was being caused by increasing population size. These models were the same as the initial single poulation model, but instead $N$ was increased to the sum of 3, 7, or 14 randomly sampled campsizes from Dyble et al. (2021).
 
+=======
+>>>>>>> 672728028f18b2fc224322993d245c9a6ee71bf1
 ### Model Set-up
 
 Model was set up with a single randomly selected camp size with a single infected individual and parameters for pathogen X. 
 
 ```{r}
 # Define Paramenters
+<<<<<<< HEAD
 N_a <-    sum(sample(camps.data$camp_total, 3))    # Total Population size of three camps
+=======
+N_a <-    sum(sample(camps.data$camp_total, 3))    # Population size
+>>>>>>> 672728028f18b2fc224322993d245c9a6ee71bf1
 initial_infected <-  1    # Initial infected
 simName <- "SEIRS model"       # Simulation name
 tf <- 365*3
@@ -11311,15 +11327,22 @@ ggplot(waning_results_single_a, aes(immunity_duration, sum_persist)) +
 
 ## 7-Patch Single Population
 
+<<<<<<< HEAD
 The same single population model was run with $N$ defined as the sum of 7 randomly selected camp sizes.
 
+=======
+>>>>>>> 672728028f18b2fc224322993d245c9a6ee71bf1
 ### Model Set-up
 
 Model was set up with a single randomly selected camp size with a single infected individual and parameters for pathogen X. 
 
 ```{r}
 # Define Paramenters
+<<<<<<< HEAD
 N_b <-    sum(sample(camps.data$camp_total, 7))    # Total Population size of three camps
+=======
+N_b <-    sum(sample(camps.data$camp_total, 7))    # Population size
+>>>>>>> 672728028f18b2fc224322993d245c9a6ee71bf1
 initial_infected <-  1    # Initial infected
 simName <- "SEIRS model"       # Simulation name
 tf <- 365*3
@@ -12905,15 +12928,22 @@ ggplot(waning_results_single_b, aes(immunity_duration, sum_persist)) +
 
 ## 14-Patch Single Population
 
+<<<<<<< HEAD
 The same single population model was ran with $N$ defined as the sum of 14 randomly sampled camp sizes.
 
+=======
+>>>>>>> 672728028f18b2fc224322993d245c9a6ee71bf1
 ### Model Set-up
 
 Model was set up with a single randomly selected camp size with a single infected individual and parameters for pathogen X. 
 
 ```{r}
 # Define Paramenters
+<<<<<<< HEAD
 N_c <-    sum(sample(camps.data$camp_total, 14))    # Total Population size of three camps
+=======
+N_c <-    sum(sample(camps.data$camp_total, 14))    # Population size
+>>>>>>> 672728028f18b2fc224322993d245c9a6ee71bf1
 initial_infected <-  1    # Initial infected
 simName <- "SEIRS model"       # Simulation name
 tf <- 365*3
@@ -12974,7 +13004,11 @@ sqrt(N_c) # magnitude of oscillations
 
 ```{r}
 # Run simulations with the Direct method
+<<<<<<< HEAD
 set.seed(25)
+=======
+set.seed(21)
+>>>>>>> 672728028f18b2fc224322993d245c9a6ee71bf1
 out_c <- ssa(
   x0 = x0_c,
   a = a,
@@ -14726,6 +14760,7 @@ double_combined_plot
 ```{r}
 ggsave(filename = "double_immunity_plot.pdf", plot = double_combined_plot, device = "pdf", width = 8, height = 4, path = "/Users/matthewhoyle/Github_R_projects/Hunter_Gatherer_models/Plots")
 ```
+
 
 
 ## References
